@@ -78,6 +78,7 @@ export default async function handler(req,res){
   }
   if(req.method==='GET'&&path==='admin/me'){const who=await auth(req);return who?send(res,200,{email:who.email}):send(res,401,{message:'Не си влязъл.'});}
   if(req.method==='POST'&&path==='admin/logout'){cookieSet(res,'troian_admin','',0);return send(res,200,{ok:true});}
+  if(path.startsWith('admin/')&&!await auth(req))return send(res,401,{message:'Само организаторът има достъп.'});
   const db=sql();
   if(req.method==='GET'&&path==='public'){
    const homes=await publicHomes(db);const [info]=await db`SELECT value FROM event_settings WHERE id=1`;
