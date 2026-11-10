@@ -1,25 +1,29 @@
-# Троян · Нова година 2027
+# Троян 2027 · независима Vercel миграция
 
-Vite/React frontend hosted on Vercel; the existing AppDeploy backend is used **temporarily** through a Vercel proxy.
+## Текущ статус
+- Преносим frontend и Vercel API без `@appdeploy/*` зависимости. Използва Neon PostgreSQL.
+- Снимките на вилата са копирани при build от `public/resources/` към `dist/images/`.
+- **Няма код за въвеждане от гостите**. Администраторът изпраща защитен личен линк за всяко семейство.
+- Администраторският вход използва Google OAuth (server-side allowlist).
+- AppDeploy `2027-9haq3i` е старият източник на данни и остава непокътнат.
+- ВАЖНО: **историческите AppDeploy отговори не са импортирани**. Не изпращайте покани, преди да проверите миграцията и автентикацията.
 
-## Current migration state
-- Vercel frontend builds without importing `@appdeploy/client`.
-- Guest invitation access is by one-click household link. No typed family access code is shown.
-- Six villa photos are provided by `public/resources/*.jpg`.
-- The **database, AI, original guest records and organizer login are not migrated**. Requests to `/api/*` are proxied to the original AppDeploy app.
-- The organizer button goes to the original AppDeploy administrator view, which still requires authentication.
-- Do **not** distribute new Vercel family invitations until the API proxy and family flow are tested.
-- Do not turn off AppDeploy; it is the current source of truth and rollback target.
-- This repository is public. Never commit guest responses, private invitation tokens, passwords or API keys.
+## Свързана Neon база
+- Dedicated Neon project: `snowy-star-04842795`.
+- Database: `troian_2027`, регион `aws-eu-central-1`.
+- Таблиците са създадени и 14 участници в 4 домакинства са импортирани като празна основа.
 
-## Local dev
-```bash
-npm install
-npm run build
-```
+## Настройки на Vercel
+Създайте Project Environment Variables в правилния Vercel проект:
+`DATABASE_URL`, `SESSION_SECRET` (минимум 32 символа), `PUBLIC_BASE_URL`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `ADMIN_EMAILS`; опционално `OPENAI_API_KEY`.
+Не публикувайте стойностите в GitHub. В Google OAuth настройте callback: `<PUBLIC_BASE_URL>/api/auth/callback`.
 
-## Next migration phase
-1. Set up a dedicated private PostgreSQL database and create the Vercel API routes.
-2. Export original AppDeploy data through the authorized admin API, map users and data, import and reconcile.
-3. Move organizer authentication to Vercel with a server-side email allowlist.
-4. Remove the API rewrite only after backend parity, mobile verification and successful data migration.
+## Следващи действия
+1. Във Vercel настройте environment variables (без изпращане на пароли в чат).
+2. Изпълнете build и посетете `/api/health`.
+3. Проверете Google organizer login и генерирайте 4 лични линка.
+4. Експортирайте AppDeploy историята през разрешен администраторски достъп, проверете структурата и импортирайте чрез защитения admin/import маршрут.
+5. Проверете реален RSVP, детски напитки, менюто, покупките и снимките през мобилен браузър.
+6. Едва тогава прекратете временната експлоатация на AppDeploy.
+
+**Безопасност:** GitHub хранилището е публично; никакви лични покани, сесии, медицински данни или credentials не бива да се записват в него.
