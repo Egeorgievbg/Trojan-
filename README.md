@@ -40,3 +40,25 @@
 - Import requires confirmation plus a matching SHA-256 digest; existing preferences, attendance and shared responses are never overwritten.
 - The complete source snapshot is stored in private Neon `migration_archives` for reconciliation. Historical shopping and event settings remain archived (not silently activated).
 - Imported child drinks are filtered against the alcohol denylist.
+
+
+## Verified maintenance checks
+Run `npm ci`, `npm test`, and `npm run check` with Node 22 or newer (Node 24 tested).
+The executable API tests run the actual handler against an isolated PGlite PostgreSQL
+instance with the Neon transport replaced. They never contact production or AppDeploy.
+`tests/tests.json` is a historical AppDeploy checklist, not the current API test suite.
+
+The migration endpoint requires an authorized export, a preview digest, and explicit
+confirmation. Source export and a pre-import backup of attendance, preferences, and
+household shared answers are archived in the same transaction as the insert-only import.
+The response includes expected and inserted record counts for reconciliation. A mismatch
+requires review (for example, another device may have inserted an answer after preview).
+No historical answers have been imported by the test suite.
+
+### External setup still required
+The existing Neon project is not exposed as a connectable native Marketplace resource
+in this Vercel team. Do not provision a replacement. The owner must set `DATABASE_URL`
+for database `troian_2027` from the existing project through a secure Vercel variable entry.
+Google login also requires real `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`, with the
+production `/api/auth/callback` URL authorized in Google Cloud. Never put those values
+in issues, source, PRs, or chat. Health intentionally remains HTTP 503 without a reachable database.
