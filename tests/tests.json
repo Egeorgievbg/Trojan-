@@ -1,0 +1,127 @@
+[
+  {
+    "name": "Secure household invitation and person-first journey",
+    "sanity": true,
+    "viewport": "mobile",
+    "covers": [
+      "POST /api/admin/v3/invites",
+      "GET /api/v3/families",
+      "POST /api/v3/join",
+      "POST /api/v3/state",
+      "POST /api/v3/rsvp",
+      "POST /api/v3/save",
+      "mobile step progression",
+      "fixed bottom Save and Continue CTA and natural scrolling in Viber",
+      "villa landing page CTA",
+      "per-member three-day RSVP",
+      "separate breakfast and dessert questions"
+    ],
+    "setup": [
+      "Sign in as the organizer and generate four V3 household invite links."
+    ],
+    "description": "Follow an individual household invitation, RSVP and complete Evgeni then Iliyana then Ivelin, retaining separate answers.",
+    "steps": [
+      "Open the new Villa landing page, confirm it shows 31 December to 2 January and use 'Попълни за семейството' to open the household list",
+      "Open the generated V3 invitation link for Evgeni and Iliyana",
+      "Optionally set an individual day of attendance for one family member; do not automatically assign the same dates to everyone",
+      "Confirm attendance for all three family members and save",
+      "Select several food choices for Evgeni and continue through his questions",
+      "Confirm that the next person is Iliyana, not another family-wide food category",
+      "Complete Iliyana and verify the next person is Ivelin with child-safe drinks",
+      "On a narrow mobile viewport, scroll through multiple photo rows while Save and Continue remains visible above the bottom safe area",
+      "Reopen the same invitation in the same browser"
+    ],
+    "expected": "The real villa landing offers a mobile-friendly entry to the secure person-first flow; guest answers remain separate and all return after reopening."
+  },
+  {
+    "name": "Unauthorized access and legacy closure",
+    "viewport": "desktop",
+    "covers": [
+      "POST /api/v3/join invalid code",
+      "POST /api/v3/state invalid token",
+      "legacy /api/family/state closure",
+      "legacy /api/join closure",
+      "admin allowlist"
+    ],
+    "description": "Uninvited guests cannot read or change any household records; legacy routes are closed.",
+    "steps": [
+      "Open the public home page without an invitation",
+      "Choose a household and try an incorrect access code",
+      "Verify that no household answers are returned",
+      "Attempt to use an old V2 session via the legacy routes",
+      "Open the organizer area while logged out"
+    ],
+    "expected": "Invalid access is denied, old public session endpoints return HTTP 410, and admin data remain gated by organizer sign-in."
+  },
+  {
+    "name": "Multiple-choice, conflicts and child-safe selections",
+    "viewport": "mobile",
+    "covers": [
+      "POST /api/v3/save whitelisted choices",
+      "POST /api/v3/save version mismatch",
+      "POST /api/v3/shared",
+      "allergies explicit confirmation",
+      "child drink restriction"
+    ],
+    "description": "Food multi-select, member-specific restrictions, and concurrent edits are correctly protected.",
+    "steps": [
+      "From a valid family invitation choose several dishes for one adult",
+      "Save and navigate back to verify all selections remain",
+      "Choose child drinks and verify beer and spirits are absent",
+      "In restrictions explicitly choose Unknown or provide a named allergen",
+      "Complete shared table and organization choices",
+      "Check separate breakfast and dessert topics per member; multiple choices remain saved"
+    ],
+    "expected": "Selections remain per person, children never receive alcohol choices, skipped questions are distinct, and conflicting concurrent saves are rejected."
+  },
+  {
+    "name": "Anonymous social preferences and private household AI",
+    "viewport": "desktop",
+    "covers": [
+      "POST /api/v3/trends",
+      "POST /api/v3/ask",
+      "POST /api/v4/coach",
+      "POST /api/v4/extract",
+      "cross-household privacy"
+    ],
+    "description": "Aggregate food trends use distinct confirmed participants and only display when privacy threshold is met.",
+    "steps": [
+      "Collect confirmed food choices from at least two people in a second household",
+      "Open the first family invitation",
+      "Look for the What others like area in the food step",
+      "Ask the AI helper a question about this family menu",
+      "Type a food preference in free Bulgarian text, use AI extraction and confirm suggested selections before saving"
+    ],
+    "expected": "Only aggregate foods with at least two votes appear, without names or restrictions. The personal assistant's context-aware question and AI-extracted choices are shown without silently overwriting the guest's selections."
+  },
+  {
+    "name": "Organizer overview and shopping plan",
+    "viewport": "desktop",
+    "covers": [
+      "GET /api/admin/v3/overview",
+      "GET /api/admin/v3/invites",
+      "GET /api/admin/summary",
+      "POST /api/admin/plan",
+      "shopping status preservation",
+      "GET /api/admin/v4/plan",
+      "POST /api/admin/v4/plan",
+      "POST /api/admin/v4/purchase",
+      "GET /api/v4/info",
+      "GET /api/admin/v4/info",
+      "POST /api/v4/guest-info with valid invitation",
+      "POST /api/admin/v4/info"
+    ],
+    "description": "Organizer can view all four families, copy invitations, and generate a menu without duplicating V3 records.",
+    "steps": [
+      "Sign in with the authorized organizer account",
+      "Open the V3 organizer block and copy a household invitation link",
+      "Inspect family progress and individual food choices",
+      "Generate a common menu after confirmed answers have been saved",
+      "Review the shopping list and ensure previously purchased items remain marked after regeneration",
+      "Open the new menu planner: approve dishes and explicit serving counts for each of seven meals across three days", 
+      "Open the new shopping list and mark a product bought",
+      "Update villa information and verify it persists after reload"
+    ],
+    "expected": "Organizer sees correct per-member answers, invitations, a consolidated menu and stable purchased markers."
+  }
+]
