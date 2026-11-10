@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { api } from '@appdeploy/client';
+import { api } from './apiClient';
 import {
  ArrowLeft, ArrowRight, Check, CheckCircle2, ChevronRight, ChevronDown, CircleAlert,
  Copy, Heart, LockKeyhole, Mic, MicOff, PartyPopper, Plus, RefreshCw, Send,
@@ -154,7 +154,6 @@ type BrowserRecognizer=Window & {SpeechRecognition?:new()=>any;webkitSpeechRecog
 export function V3Planner({onHome,onAdmin}:{onHome:()=>void;onAdmin:()=>void}){
  const [families,setFamilies]=useState<Family[]>([]);
  const [familyId,setFamilyId]=useState('');
- const [accessCode,setAccessCode]=useState('');
  const [state,setState]=useState<State|null>(null);
  const [token,setToken]=useState('');
  const [page,setPage]=useState<'choose'|'flow'>('choose');
@@ -212,7 +211,7 @@ export function V3Planner({onHome,onAdmin}:{onHome:()=>void;onAdmin:()=>void}){
    const t=res.data.token as string;
    const all=localTokens();all[id]=t;localStorage.setItem('troyan_v3_sessions',JSON.stringify(all));
    await loadSession(t);
-   setFamilyId(id);setAccessCode('');
+   setFamilyId(id);
    if(location.hash.startsWith('#invite='))history.replaceState(null,'',location.pathname+location.search);
   }catch(e){setErrorText(apiError(e));}finally{setBusy(false);}
  },[loadSession]);
@@ -321,9 +320,9 @@ export function V3Planner({onHome,onAdmin}:{onHome:()=>void;onAdmin:()=>void}){
      <span className="v3-home-index">0{i+1}</span><strong>{h.title}</strong><span className="v3-home-tags">{h.members.map(p=><span key={p.id}>{p.child?'🧸 ':''}{p.name}</span>)}</span>
      <span className="v3-home-continue">{localTokens()[h.id]?'Продължи разговора':'Отвори семейната покана'} <ArrowRight size={17}/></span>
     </button>
-    {familyId===h.id&&<div className="v3-access"><label htmlFor="v3-code">Семеен код от организатора</label><div><input id="v3-code" value={accessCode} onChange={e=>setAccessCode(e.target.value)} placeholder="Постави кода или отвори семейния линк" autoComplete="off"/><button disabled={busy||!accessCode.trim()} onClick={()=>join(h.id,accessCode.trim())}><LockKeyhole size={15}/> Влез</button></div><small>Личният семеен линк попълва този код автоматично.</small></div>}
+    {familyId===h.id&&<div className="v3-access"><strong>Без код за въвеждане</strong><p>Отвори личната покана от организатора във Viber. Семейният достъп се активира автоматично от линка.</p></div>}
    </section>)}</div>
-  <p className="v3-private"><ShieldCheck size={16}/> Личните семейни отговори се виждат само с вашия код. В общите резултати няма имена и алергии.</p>
+  <p className="v3-private"><ShieldCheck size={16}/> Личните семейни отговори са достъпни само през семеен линк. В общите резултати няма имена и алергии.</p>
   <button className="v3-back" onClick={onHome}><ArrowLeft size={16}/> Към началото</button>
  </main>;
  if(!state||!current)return <main className="v3">Зареждане...</main>;

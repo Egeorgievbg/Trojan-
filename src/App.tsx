@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { api, auth } from '@appdeploy/client';
+import { api, auth } from './apiClient';
 import { Message } from '@chatscope/chat-ui-kit-react';
 import '@chatscope/chat-ui-kit-styles/dist/default/styles.min.css';
 import './chat.css';
@@ -563,8 +563,8 @@ function App() {
           </button>
         </div>
       )}
-      {screen === 'home' && <VillaLanding onStart={() => navigate('family')} onAdmin={() => navigate('admin')} />}
-      {screen === 'family' && <V3Planner onHome={() => navigate('home')} onAdmin={() => navigate('admin')} />}
+      {screen === 'home' && <VillaLanding onStart={() => navigate('family')} onAdmin={() => window.location.assign('https://2027-9haq3i.v2.appdeploy.ai/#admin')} />}
+      {screen === 'family' && <V3Planner onHome={() => navigate('home')} onAdmin={() => window.location.assign('https://2027-9haq3i.v2.appdeploy.ai/#admin')} />}
       {screen === 'select' && (
         <main className="page-container">
           <div className="page-heading">

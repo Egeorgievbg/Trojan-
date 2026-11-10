@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api } from '@appdeploy/client';
+import { api } from './apiClient';
 import { Check, Download, RefreshCw, Save } from 'lucide-react';
 import './v4-admin.css';
 

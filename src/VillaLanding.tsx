@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api } from '@appdeploy/client';
+import { api } from './apiClient';
 import {
   ArrowRight, CalendarDays, Camera, ChevronLeft, ChevronRight,
   Clock3, LockKeyhole, MapPin, PartyPopper, ShieldCheck,
