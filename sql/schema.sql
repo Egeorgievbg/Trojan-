@@ -10,3 +10,5 @@ CREATE TABLE IF NOT EXISTS event_settings(id INTEGER PRIMARY KEY CHECK(id=1), va
 CREATE TABLE IF NOT EXISTS menu_items(slot_id TEXT NOT NULL, recipe_id TEXT NOT NULL, portions INTEGER NOT NULL CHECK(portions BETWEEN 0 AND 120), PRIMARY KEY(slot_id,recipe_id));
 CREATE TABLE IF NOT EXISTS purchases(item_id TEXT PRIMARY KEY, bought BOOLEAN NOT NULL DEFAULT FALSE, assigned_to TEXT NOT NULL DEFAULT '', updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
 CREATE INDEX IF NOT EXISTS guest_sessions_expires_at_idx ON guest_sessions(expires_at);
+-- Immutable source snapshots for reconciliation after an authorized AppDeploy export.
+CREATE TABLE IF NOT EXISTS migration_archives(source_id TEXT PRIMARY KEY,payload JSONB NOT NULL,digest TEXT NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());

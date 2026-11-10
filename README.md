@@ -33,3 +33,10 @@
 - Health: https://trojan-nu-liard.vercel.app/api/health (HTTP 503 until Neon DATABASE_URL is present and reachable).
 - Environment Settings: https://vercel.com/egeorgievbgs-projects/trojan/settings/environment-variables
 - After adding DATABASE_URL from Neon, deploy again and check databaseReachable=true before distributing links.
+
+## Safe import workflow
+- Export the historical dataset with authorized AppDeploy admin permissions; keep it off this public repository.
+- In the Vercel organizer admin panel open **Миграция**, choose the export JSON and review the preview counts.
+- Import requires confirmation plus a matching SHA-256 digest; existing preferences, attendance and shared responses are never overwritten.
+- The complete source snapshot is stored in private Neon `migration_archives` for reconciliation. Historical shopping and event settings remain archived (not silently activated).
+- Imported child drinks are filtered against the alcohol denylist.

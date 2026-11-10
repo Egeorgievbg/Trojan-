@@ -168,18 +168,76 @@ export default async function handler(req,res){
     await db`INSERT INTO event_settings(id,value) VALUES (1,${JSON.stringify(current)}::jsonb) ON CONFLICT(id) DO UPDATE SET value=EXCLUDED.value,updated_at=NOW()`;
     return send(res,200,{event:current});
    }
-   if(req.method==='POST'&&path==='admin/import'){
-    const groups=Array.isArray(body.families)?body.families:[];if(groups.length>4)return send(res,400,{message:'Очаквам до четири домакинства.'});
-    let n=0;
-    for(const group of groups){const familyId=clean(group.id,60);const [family]=await db`SELECT id FROM households WHERE id=${familyId}`;if(!family)continue;
-     const members=await db`SELECT id FROM members WHERE household_id=${familyId}`;const validIds=new Set(members.map(m=>m.id));
-     for(const [p,topicsMap] of Object.entries(group.answers||{}))if(validIds.has(p))for(const [topic,val] of Object.entries(topicsMap||{}))if(topics.includes(topic)&&val&&typeof val==='object'){
-       const raw=val;const value={selected:Array.isArray(raw.selected)?raw.selected.filter(x=>allowed[topic]?.includes(x)).slice(0,16):[],note:clean(raw.note,450),allergyStatus:clean(raw.allergyStatus,20),allergens:clean(raw.allergens,260),dislikes:clean(raw.dislikes,250),skipped:raw.skipped===true};
-       await db`INSERT INTO preferences(person_id,topic,value,version) VALUES (${p},${topic},${JSON.stringify(value)},1) ON CONFLICT(person_id,topic) DO NOTHING`;n++;
-     }
-     for(const [p,status] of Object.entries(group.rsvp?.statuses||{}))if(validIds.has(p)&&['yes','maybe','no'].includes(String(status))){const dates=group.rsvp?.daysByPerson?.[p]||group.rsvp?.days||[];await db`INSERT INTO attendance(person_id,status,days,version) VALUES (${p},${status},${pgDays(Array.isArray(dates)?dates.map(d=>({'31 декември':days[0],'1 януари':days[1],'2 януари':days[2]}[d]||d)):[])}::text[],1) ON CONFLICT(person_id) DO NOTHING`;}
+
+   if(req.method==='POST'&&(path==='admin/import-preview'||path==='admin/import')){
+    const groups=Array.isArray(body.families)?body.families:null;
+    if(!groups||groups.length<1||groups.length>4)return send(res,400,{message:'Очаквам между едно и четири домакинства.'});
+    const payload={families:groups,event:body.event||null,shopping:body.shopping||null,plan:body.plan||null};
+    const serialized=JSON.stringify(payload);
+    if(serialized.length>1000000)return send(res,413,{message:'Експортът е прекалено голям (максимум 1 MB).'});
+    const digest=h(serialized);
+    const existingPrefs=await db`SELECT person_id,topic FROM preferences`;
+    const existingAttendance=await db`SELECT person_id FROM attendance`;
+    const existingShared=await db`SELECT household_id,topic FROM household_shared`;
+    const prefKeys=new Set(existingPrefs.map(p=>p.person_id+'|'+p.topic));
+    const attendingIds=new Set(existingAttendance.map(a=>a.person_id));
+    const sharedKeys=new Set(existingShared.map(s=>s.household_id+'|'+s.topic));
+    const answers=[],rsvps=[],shared=[];
+    let unknown=0;
+    const seenFamilies=new Set();
+    for(const group of groups){
+      const familyId=clean(group?.id,60);
+      if(seenFamilies.has(familyId))return send(res,400,{message:'Дублирано домакинство в експорта.'});
+      seenFamilies.add(familyId);
+      const [family]=await db`SELECT id FROM households WHERE id=${familyId}`;
+      if(!family){unknown++;continue;}
+      const members=await db`SELECT id,child FROM members WHERE household_id=${familyId}`;
+      const valid=new Map(members.map(m=>[m.id,m]));
+      for(const [personId,topicMap] of Object.entries(group.answers||{})){
+       const member=valid.get(personId);
+       if(!member){unknown++;continue;}
+       if(!topicMap||typeof topicMap!=='object'||Array.isArray(topicMap)){unknown++;continue;}
+       for(const [topic,raw] of Object.entries(topicMap)){
+        if(!topics.includes(topic)||!raw||typeof raw!=='object'||Array.isArray(raw)){unknown++;continue;}
+        const selected=Array.isArray(raw.selected)?[...new Set(raw.selected.filter(x=>typeof x==='string'&&allowed[topic].includes(x)&&!(member.child&&topic==='drinks'&&adultDrinks.has(x))))].slice(0,16):[];
+        const status=['none','has','unknown'].includes(raw.allergyStatus)?raw.allergyStatus:'unknown';
+        const record={selected,note:clean(raw.note,450),allergyStatus:topic==='restrictions'?status:'unknown',allergens:topic==='restrictions'&&status==='has'?clean(raw.allergens,260):'',dislikes:topic==='restrictions'?clean(raw.dislikes,250):'',skipped:raw.skipped===true};
+        answers.push({personId,topic,record});
+       }
+      }
+      for(const [personId,status] of Object.entries(group.rsvp?.statuses||{})){
+       if(!valid.has(personId)||!['yes','maybe','no'].includes(status)){unknown++;continue;}
+       const rawDays=group.rsvp?.daysByPerson?.[personId]||group.rsvp?.days||[];
+       const dates=Array.isArray(rawDays)?rawDays.map(v=>({'31 декември':days[0],'1 януари':days[1],'2 януари':days[2]}[v]||v)).filter(v=>days.includes(v)):[];
+       rsvps.push({personId,status,dates:[...new Set(dates)]});
+      }
+      for(const [topic,raw] of Object.entries(group.shared||{})){
+       if(!['table','organization'].includes(topic)||!raw||typeof raw!=='object'||Array.isArray(raw)){unknown++;continue;}
+       shared.push({familyId,topic,record:{selected:Array.isArray(raw.selected)?raw.selected.filter(x=>typeof x==='string').slice(0,14).map(x=>clean(x,55)):[],note:clean(raw.note,450),skipped:raw.skipped===true}});
+      }
     }
-    return send(res,200,{ok:true,importedPreferences:n,note:'Само липсващи отговори са добавени. Текущи записи не се презаписват.'});
+    const pendingAnswers=answers.filter(x=>!prefKeys.has(x.personId+'|'+x.topic));
+    const pendingRsvps=rsvps.filter(x=>!attendingIds.has(x.personId));
+    const pendingShared=shared.filter(x=>!sharedKeys.has(x.familyId+'|'+x.topic));
+    const summary={households:seenFamilies.size,preferences:pendingAnswers.length,attendance:pendingRsvps.length,shared:pendingShared.length,existingPreferences:answers.length-pendingAnswers.length,existingAttendance:rsvps.length-pendingRsvps.length,existingShared:shared.length-pendingShared.length,ignored:unknown,archiveIncludesExtras:!!(body.event||body.shopping||body.plan)};
+    if(path==='admin/import-preview')return send(res,200,{ok:true,preview:true,digest,summary,warning:'Съществуващите записи няма да се презаписват. Меню, покупки и настройки се архивират, но не се активират автоматично.'});
+    if(body.confirm!==true||body.expectedDigest!==digest)return send(res,409,{message:'Първо прегледай импорта и потвърди непроменения файл.'});
+    const archiveId='appdeploy-v3-'+digest.slice(0,40);
+    await db`INSERT INTO migration_archives(source_id,payload,digest) VALUES (${archiveId},${serialized}::jsonb,${digest}) ON CONFLICT(source_id) DO NOTHING`;
+    let importedPreferences=0,importedAttendance=0,importedShared=0;
+    for(const x of pendingAnswers){
+      const rows=await db`INSERT INTO preferences(person_id,topic,value,version) VALUES (${x.personId},${x.topic},${JSON.stringify(x.record)}::jsonb,1) ON CONFLICT(person_id,topic) DO NOTHING RETURNING person_id`;
+      importedPreferences+=rows.length;
+    }
+    for(const x of pendingRsvps){
+      const rows=await db`INSERT INTO attendance(person_id,status,days,version) VALUES (${x.personId},${x.status},${pgDays(x.dates)}::text[],1) ON CONFLICT(person_id) DO NOTHING RETURNING person_id`;
+      importedAttendance+=rows.length;
+    }
+    for(const x of pendingShared){
+      const rows=await db`INSERT INTO household_shared(household_id,topic,value,version) VALUES (${x.familyId},${x.topic},${JSON.stringify(x.record)}::jsonb,1) ON CONFLICT(household_id,topic) DO NOTHING RETURNING household_id`;
+      importedShared+=rows.length;
+    }
+    return send(res,200,{ok:true,archiveId,importedPreferences,importedAttendance,importedShared,summary,warning:'Исторически данни за меню и покупки са запазени в архива за ръчна сверка. Не са презаписани активните записи.'});
    }
   }
   return send(res,404,{message:'Няма такъв маршрут.'});
