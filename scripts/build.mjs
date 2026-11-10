@@ -1,4 +1,6 @@
 import {rm,mkdir,cp,copyFile,access} from 'node:fs/promises';
+import {execFileSync} from 'node:child_process';
+for(const file of ['public/app.js','api/index.js'])execFileSync(process.execPath,['--check',file],{stdio:'inherit'});
 const names={
 'aerial.jpg':'villa-aerial.jpg',
 'veranda.jpg':'villa-veranda.jpg',

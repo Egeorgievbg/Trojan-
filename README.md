@@ -27,3 +27,9 @@
 6. Едва тогава прекратете временната експлоатация на AppDeploy.
 
 **Безопасност:** GitHub хранилището е публично; никакви лични покани, сесии, медицински данни или credentials не бива да се записват в него.
+
+## Vercel production address and readiness
+- Production URL: https://trojan-nu-liard.vercel.app/
+- Health: https://trojan-nu-liard.vercel.app/api/health (HTTP 503 until Neon DATABASE_URL is present and reachable).
+- Environment Settings: https://vercel.com/egeorgievbgs-projects/trojan/settings/environment-variables
+- After adding DATABASE_URL from Neon, deploy again and check databaseReachable=true before distributing links.

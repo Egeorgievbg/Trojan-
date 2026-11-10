@@ -86,5 +86,27 @@ function exportShopping(){const rows=[['Продукт','Категория','К
 async function importOld(){const file=document.querySelector('#migration-file')?.files?.[0];if(!file){error='Избери JSON файл от стария проект.';renderAdmin();return;}try{const data=JSON.parse(await file.text());const result=await api('admin/import',data);adminData=await api('admin/overview');message=`Импортирани: ${result.importedPreferences||0} записа. Съществуващите не са презаписани.`;renderAdmin();}catch(e){error=e.message;renderAdmin()}}
 window.addEventListener('keydown',e=>{if(!document.getElementById('lightbox'))return;if(e.key==='Escape')closePhoto();else if(e.key==='ArrowLeft'||e.key==='ArrowRight'){const next=(photoIndex+(e.key==='ArrowRight'?1:-1)+PHOTO.length)%PHOTO.length;closePhoto();showPhoto(next)}});
 window.addEventListener('hashchange',()=>{if(location.hash==='#admin')showAdmin();else if(location.hash.startsWith('#invite='))fromInvite(location.hash);});
-async function init(){try{const data=await api('public');families=data.families||HOUSEHOLDS;eventInfo=data.event||{};}catch{families=HOUSEHOLDS;}if(location.hash.startsWith('#invite='))await fromInvite(location.hash);else if(location.hash==='#admin')await showAdmin();else renderHome()}
-init();
+async function init(){
+ let ready=true;
+ try{const data=await api('public');families=data.families||HOUSEHOLDS;eventInfo=data.event||{};}
+ catch{families=HOUSEHOLDS;ready=false;}
+ if(location.hash.startsWith('#invite='))await fromInvite(location.hash);
+ else if(location.hash==='#admin')await showAdmin();
+ else {
+  renderHome();
+  if(!ready){
+   const panel=document.createElement('div');
+   panel.setAttribute('role','status');
+   panel.style.cssText='background:#fff8e7;color:#6b5126;padding:13px 20px;text-align:center;font-size:13px;border-bottom:1px solid #e6c98b';
+   panel.textContent='Сайтът се отваря, но семейните анкети временно не могат да се записват. Организаторът настройва базата данни.';
+   const header=app.querySelector('.header');
+   if(header)header.insertAdjacentElement('afterend',panel);else app.prepend(panel);
+  }
+ }
+}
+init().catch(err=>{
+ console.error('App initialization failed',err);
+ if(!app)return;
+ app.innerHTML='<main style="min-height:100vh;padding:38px 20px;display:grid;place-items:center;font-family:system-ui;background:#fafaf7;color:#224534"><section style="max-width:560px"><h1>Нова година в Троян</h1><p>Възникна проблем при зареждането. Презареди страницата. Ако проблемът остане, свържи се с организатора.</p><button id="retry-loading" style="padding:13px 20px;background:#dcb878;border:0;border-radius:9px">Опитай отново</button></section></main>';
+ app.querySelector('#retry-loading')?.addEventListener('click',()=>location.reload());
+});

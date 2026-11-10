@@ -51,7 +51,11 @@ export default async function handler(req,res){
  const path=route(req);const body=req.body&&typeof req.body==='object'?req.body:{};
  if(req.method==='POST'&&!validHost(req))return send(res,403,{message:'Невалиден origin.'});
  try{
-  if(req.method==='GET'&&path==='health')return send(res,200,{ok:true,databaseConfigured:!!process.env.DATABASE_URL,version:'vercel-port-v1'});
+  if(req.method==='GET'&&path==='health'){
+   if(!process.env.DATABASE_URL)return send(res,503,{ok:false,databaseConfigured:false,databaseReachable:false,version:'vercel-port-v1'});
+   try{await sql()`SELECT 1 AS check`;return send(res,200,{ok:true,databaseConfigured:true,databaseReachable:true,version:'vercel-port-v1'});}
+   catch{return send(res,503,{ok:false,databaseConfigured:true,databaseReachable:false,version:'vercel-port-v1'});}
+  }
   if(req.method==='GET'&&path==='auth/google'){
    if(!process.env.GOOGLE_CLIENT_ID||!process.env.GOOGLE_CLIENT_SECRET||!base)return send(res,503,{message:'Google OAuth липсва.'});
    const state=random(),verifier=random(),challenge=createHash('sha256').update(verifier).digest('base64url');
