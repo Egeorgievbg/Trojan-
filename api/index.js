@@ -9,7 +9,7 @@ const h=v=>createHash('sha256').update(String(v)).digest('hex');
 const random=()=>randomBytes(32).toString('base64url');
 const send=(res,code,body)=>res.status(code).json(body);
 const clean=(x,max=450)=>typeof x==='string'?x.trim().slice(0,max):'';
-const cookie=(req,key)=>{const pair=(req.headers.cookie||'').split(';').map(v=>v.trim()).find(v=>v.startsWith(key+'='));return pair?decodeURIComponent(pair.slice(key.length+1)):'';};
+const cookie=(req,key)=>{const pair=(req.headers.cookie||'').split(';').map(v=>v.trim()).find(v=>v.startsWith(key+'='));try{return pair?decodeURIComponent(pair.slice(key.length+1)):'';}catch{return '';}};
 const cookieSet=(res,name,value,maxAge,httpOnly=true)=>{const existing=res.getHeader('Set-Cookie');const next=`${name}=${encodeURIComponent(value)}; Path=/; Max-Age=${maxAge}; SameSite=Lax; Secure${httpOnly?'; HttpOnly':''}`;res.setHeader('Set-Cookie',[...(existing?Array.isArray(existing)?existing:[existing]:[]),next]);};
 const sql=()=>{if(!process.env.DATABASE_URL)throw Object.assign(new Error('DATABASE_URL липсва.'),{status:503});return neon(process.env.DATABASE_URL);};
 const secret=()=>{if(SECRET.length<32)throw Object.assign(new Error('SESSION_SECRET не е конфигуриран.'),{status:503});return new TextEncoder().encode(SECRET);};
@@ -48,7 +48,7 @@ function route(req){const p=req.query?.path;if(Array.isArray(p))return p.join('/
 export default async function handler(req,res){
  res.setHeader('Cache-Control','no-store');
  res.setHeader('Content-Type','application/json; charset=utf-8');
- const path=route(req);const body=req.body&&typeof req.body==='object'?req.body:{};
+ const path=route(req).replace(/^\/+|\/+$/g,'');const body=req.body&&typeof req.body==='object'?req.body:{};
  if(req.method==='POST'&&!validHost(req))return send(res,403,{message:'Невалиден origin.'});
  try{
   if(req.method==='GET'&&path==='health'){
@@ -65,7 +65,8 @@ export default async function handler(req,res){
    return res.redirect(302,u.toString());
   }
   if(req.method==='GET'&&path==='auth/callback'){
-   const authData=await jwtVerify(cookie(req,'troian_oauth'),secret(),{issuer:'troian-2027',audience:'oauth'});
+   if(!process.env.GOOGLE_CLIENT_ID||!process.env.GOOGLE_CLIENT_SECRET||!base)return send(res,503,{message:'Google OAuth липсва.'});
+   let authData;try{authData=await jwtVerify(cookie(req,'troian_oauth'),secret(),{issuer:'troian-2027',audience:'oauth',algorithms:['HS256']});}catch{return send(res,403,{message:'Невалидна или изтекла OAuth сесия.'});}
    if(authData.payload.state!==req.query.state||!req.query.code)return send(res,403,{message:'Невалиден OAuth state.'});
    const data=new URLSearchParams({code:String(req.query.code),client_id:process.env.GOOGLE_CLIENT_ID,client_secret:process.env.GOOGLE_CLIENT_SECRET,redirect_uri:base+'/api/auth/callback',grant_type:'authorization_code',code_verifier:String(authData.payload.verifier)});
    const result=await fetch('https://oauth2.googleapis.com/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:data});if(!result.ok)return send(res,401,{message:'Невалиден Google OAuth отговор.'});
@@ -79,6 +80,9 @@ export default async function handler(req,res){
   if(req.method==='GET'&&path==='admin/me'){const who=await auth(req);return who?send(res,200,{email:who.email}):send(res,401,{message:'Не си влязъл.'});}
   if(req.method==='POST'&&path==='admin/logout'){cookieSet(res,'troian_admin','',0);return send(res,200,{ok:true});}
   if(path.startsWith('admin/')&&!await auth(req))return send(res,401,{message:'Само организаторът има достъп.'});
+  const routes={public:'GET','guest/join':'POST','guest/state':'POST','guest/attendance':'POST','guest/save':'POST','guest/shared':'POST','guest/trends':'POST','guest/coach':'POST','admin/overview':'GET','admin/invite':'POST','admin/menu':'POST','admin/purchase':'POST','admin/event':'POST','admin/import-preview':'POST','admin/import':'POST'};
+  if(!routes[path])return send(res,404,{message:'Няма такъв маршрут.'});
+  if(routes[path]!==req.method)return send(res,405,{message:'Непозволен метод.'});
   const db=sql();
   if(req.method==='GET'&&path==='public'){
    const homes=await publicHomes(db);const [info]=await db`SELECT value FROM event_settings WHERE id=1`;
@@ -100,9 +104,9 @@ export default async function handler(req,res){
   if(req.method==='POST'&&path==='guest/attendance'){
    const home=await guest(req);if(!home)return send(res,401,{message:'Невалидна семейна сесия.'});
    const memberId=clean(body.personId,60),status=clean(body.status,10),chosenDays=Array.isArray(body.days)?body.days.filter(x=>days.includes(x)):[];
-   if(!['yes','maybe','no'].includes(status))return send(res,400,{message:'Избери присъствие.'});
+   if(!['yes','maybe','no'].includes(status)||(status==='yes'&&chosenDays.length===0))return send(res,400,{message:'Избери присъствие.'});
    const [member]=await db`SELECT id FROM members WHERE id=${memberId} AND household_id=${home}`;if(!member)return send(res,403,{message:'Чужд участник.'});
-   const version=Number(body.version||0);
+   const version=Number(body.version||0);if(!Number.isSafeInteger(version)||version<0)return send(res,400,{message:'Невалидна версия.'});
    const result=version===0?await db`INSERT INTO attendance(person_id,status,days,version) VALUES (${memberId},${status},${pgDays(chosenDays)}::text[],1) ON CONFLICT DO NOTHING RETURNING version`:await db`UPDATE attendance SET status=${status},days=${pgDays(chosenDays)}::text[],version=version+1,updated_at=NOW() WHERE person_id=${memberId} AND version=${version} RETURNING version`;
    if(result.length===0)return send(res,409,{message:'Отговорът е променен от друго устройство. Презареди.'});
    return send(res,200,{personId:memberId,status,days:chosenDays,version:result[0].version});
@@ -116,7 +120,7 @@ export default async function handler(req,res){
    const allergyStatus=['none','has','unknown'].includes(val.allergyStatus)?val.allergyStatus:'unknown';
    if(topic==='restrictions'&&allergyStatus==='has'&&!clean(val.allergens,260))return send(res,400,{message:'Уточни алергена или избери Не знам.'});
    const value={selected:choices,note:clean(val.note,450),allergyStatus:topic==='restrictions'?allergyStatus:'unknown',allergens:topic==='restrictions'&&allergyStatus==='has'?clean(val.allergens,260):'',dislikes:topic==='restrictions'?clean(val.dislikes,250):'',skipped:val.skipped===true};
-   const version=Number(body.version||0);
+   const version=Number(body.version||0);if(!Number.isSafeInteger(version)||version<0)return send(res,400,{message:'Невалидна версия.'});
    const result=version===0?await db`INSERT INTO preferences(person_id,topic,value,version) VALUES (${personId},${topic},${JSON.stringify(value)},1) ON CONFLICT DO NOTHING RETURNING version`:await db`UPDATE preferences SET value=${JSON.stringify(value)}::jsonb,version=version+1,updated_at=NOW() WHERE person_id=${personId} AND topic=${topic} AND version=${version} RETURNING version`;
    if(result.length===0)return send(res,409,{message:'Някой вече е редактирал този отговор. Презареди.'});
    return send(res,200,{topic,value:{...value,version:result[0].version}});
@@ -124,7 +128,7 @@ export default async function handler(req,res){
   if(req.method==='POST'&&path==='guest/shared'){
    const home=await guest(req);if(!home)return send(res,401,{message:'Необходима е семейна покана.'});
    const topic=clean(body.topic,24);if(!['table','organization'].includes(topic))return send(res,400,{message:'Невалидна обща тема.'});
-   const val=body.value||{},value={selected:Array.isArray(val.selected)?val.selected.filter(x=>typeof x==='string').slice(0,14).map(x=>clean(x,55)):[],note:clean(val.note,450),skipped:val.skipped===true};const version=Number(body.version||0);
+   const val=body.value||{},value={selected:Array.isArray(val.selected)?val.selected.filter(x=>typeof x==='string').slice(0,14).map(x=>clean(x,55)):[],note:clean(val.note,450),skipped:val.skipped===true};const version=Number(body.version||0);if(!Number.isSafeInteger(version)||version<0)return send(res,400,{message:'Невалидна версия.'});
    const result=version===0?await db`INSERT INTO household_shared(household_id,topic,value,version) VALUES (${home},${topic},${JSON.stringify(value)},1) ON CONFLICT DO NOTHING RETURNING version`:await db`UPDATE household_shared SET value=${JSON.stringify(value)}::jsonb,version=version+1,updated_at=NOW() WHERE household_id=${home} AND topic=${topic} AND version=${version} RETURNING version`;
    if(!result.length)return send(res,409,{message:'Има по-нова семейна редакция.'});return send(res,200,{topic,value:{...value,version:result[0].version}});
   }
@@ -148,7 +152,7 @@ export default async function handler(req,res){
    }
    if(req.method==='POST'&&path==='admin/invite'){
     const familyId=clean(body.familyId,60),[home]=await db`SELECT id FROM households WHERE id=${familyId}`;if(!home)return send(res,404,{message:'Няма такова семейство.'});
-    const invitation=random();await db`INSERT INTO invitations(household_id,token_hash,issued_at) VALUES (${familyId},${h(invitation)},NOW()) ON CONFLICT(household_id) DO UPDATE SET token_hash=EXCLUDED.token_hash,issued_at=NOW()`;await db`DELETE FROM guest_sessions WHERE household_id=${familyId}`;
+    const invitation=random();await db.transaction([db`INSERT INTO invitations(household_id,token_hash,issued_at) VALUES (${familyId},${h(invitation)},NOW()) ON CONFLICT(household_id) DO UPDATE SET token_hash=EXCLUDED.token_hash,issued_at=NOW()`,db`DELETE FROM guest_sessions WHERE household_id=${familyId}`]);
     return send(res,200,{familyId,url:base+'/#invite='+encodeURIComponent(familyId+'.'+invitation),warning:'Новият линк заменя предишния за това семейство.'});
    }
    if(req.method==='POST'&&path==='admin/menu'){
@@ -224,23 +228,18 @@ export default async function handler(req,res){
     if(path==='admin/import-preview')return send(res,200,{ok:true,preview:true,digest,summary,warning:'Съществуващите записи няма да се презаписват. Меню, покупки и настройки се архивират, но не се активират автоматично.'});
     if(body.confirm!==true||body.expectedDigest!==digest)return send(res,409,{message:'Първо прегледай импорта и потвърди непроменения файл.'});
     const archiveId='appdeploy-v3-'+digest.slice(0,40);
-    await db`INSERT INTO migration_archives(source_id,payload,digest) VALUES (${archiveId},${serialized}::jsonb,${digest}) ON CONFLICT(source_id) DO NOTHING`;
-    let importedPreferences=0,importedAttendance=0,importedShared=0;
-    for(const x of pendingAnswers){
-      const rows=await db`INSERT INTO preferences(person_id,topic,value,version) VALUES (${x.personId},${x.topic},${JSON.stringify(x.record)}::jsonb,1) ON CONFLICT(person_id,topic) DO NOTHING RETURNING person_id`;
-      importedPreferences+=rows.length;
-    }
-    for(const x of pendingRsvps){
-      const rows=await db`INSERT INTO attendance(person_id,status,days,version) VALUES (${x.personId},${x.status},${pgDays(x.dates)}::text[],1) ON CONFLICT(person_id) DO NOTHING RETURNING person_id`;
-      importedAttendance+=rows.length;
-    }
-    for(const x of pendingShared){
-      const rows=await db`INSERT INTO household_shared(household_id,topic,value,version) VALUES (${x.familyId},${x.topic},${JSON.stringify(x.record)}::jsonb,1) ON CONFLICT(household_id,topic) DO NOTHING RETURNING household_id`;
-      importedShared+=rows.length;
-    }
-    return send(res,200,{ok:true,archiveId,importedPreferences,importedAttendance,importedShared,summary,warning:'Исторически данни за меню и покупки са запазени в архива за ръчна сверка. Не са презаписани активните записи.'});
+    const queries=[db`INSERT INTO migration_archives(source_id,payload,digest) VALUES (${archiveId},jsonb_build_object('source',${serialized}::jsonb,'backup',jsonb_build_object('attendance',(SELECT COALESCE(jsonb_agg(to_jsonb(a)),'[]'::jsonb) FROM attendance a),'preferences',(SELECT COALESCE(jsonb_agg(to_jsonb(p)),'[]'::jsonb) FROM preferences p),'shared',(SELECT COALESCE(jsonb_agg(to_jsonb(s)),'[]'::jsonb) FROM household_shared s))),${digest}) ON CONFLICT(source_id) DO NOTHING`];
+    for(const x of pendingAnswers)queries.push(db`INSERT INTO preferences(person_id,topic,value,version) VALUES (${x.personId},${x.topic},${JSON.stringify(x.record)}::jsonb,1) ON CONFLICT(person_id,topic) DO NOTHING RETURNING person_id`);
+    for(const x of pendingRsvps)queries.push(db`INSERT INTO attendance(person_id,status,days,version) VALUES (${x.personId},${x.status},${pgDays(x.dates)}::text[],1) ON CONFLICT(person_id) DO NOTHING RETURNING person_id`);
+    for(const x of pendingShared)queries.push(db`INSERT INTO household_shared(household_id,topic,value,version) VALUES (${x.familyId},${x.topic},${JSON.stringify(x.record)}::jsonb,1) ON CONFLICT(household_id,topic) DO NOTHING RETURNING household_id`);
+    const results=await db.transaction(queries);
+    let offset=1;
+    const count=n=>results.slice(offset,offset+=n).reduce((sum,rows)=>sum+rows.length,0);
+    const importedPreferences=count(pendingAnswers.length),importedAttendance=count(pendingRsvps.length),importedShared=count(pendingShared.length);
+    const reconciliation={expected:pendingAnswers.length+pendingRsvps.length+pendingShared.length,inserted:importedPreferences+importedAttendance+importedShared};
+    return send(res,200,{ok:true,archiveId,reconciliation,importedPreferences,importedAttendance,importedShared,summary,warning:'Исторически данни за меню и покупки са запазени в архива за ръчна сверка. Не са презаписани активните записи.'});
    }
   }
   return send(res,404,{message:'Няма такъв маршрут.'});
- }catch(e){console.error('api error',e?.message);return send(res,e?.status||500,{message:e?.status?e.message:'Вътрешна грешка. Провери настройките на сървъра.'});}
+ }catch(e){console.error('api request failed',{path,name:e?.name||'Error'});return send(res,e?.status||500,{message:e?.status?e.message:'Вътрешна грешка. Провери настройките на сървъра.'});}
 }

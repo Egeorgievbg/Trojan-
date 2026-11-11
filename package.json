@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "build": "node scripts/build.mjs",
-    "check": "node --check api/index.js && node --check public/app.js && node scripts/build.mjs"
+    "check": "node --check api/index.js && node --check public/app.js && node scripts/build.mjs",
+    "test": "node --experimental-test-module-mocks --test tests/*.test.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.0.0",
@@ -13,5 +14,8 @@
   },
   "engines": {
     "node": ">=22"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.16"
   }
 }
