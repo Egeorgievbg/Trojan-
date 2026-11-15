@@ -67,6 +67,14 @@ test('child drink screen excludes alcoholic choices', () => {
   assert.match(app.innerHTML, /Вода/);
 });
 
+test('restriction screen collects category and restriction type', () => {
+  const { app, run } = browser();
+  run(`guest={family:{id:'family-test',title:'Тестово домакинство',members:[{id:'adult',name:'Възрастен',child:false}]},attendance:{adult:{status:'yes',days:[DATES[0]]}},answers:{adult:{restrictions:{allergyStatus:'has',restrictionType:'allergy',allergenCategories:[]}}},shared:{},event:{}}; selectGuestStage(guestSteps().findIndex(step=>step.person?.id==='adult'&&step.topic==='restrictions'))`);
+  assert.match(app.innerHTML, /Има ли алергии или непоносимости/);
+  assert.match(app.innerHTML, /Ядки/);
+  assert.match(app.innerHTML, /Непоносимост/);
+});
+
 test('organizer sees escaped allergy details and notes', () => {
   const { run } = browser();
   run(`adminData={families:[{family:{id:'test',title:'Test',members:[{id:'child',name:'Child'}]},attendance:{},answers:{child:{restrictions:{selected:[],allergyStatus:'has',allergens:'<nuts>',dislikes:'test dislike',note:'test note'}}}}]};`);
