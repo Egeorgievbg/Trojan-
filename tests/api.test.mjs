@@ -116,7 +116,10 @@ test('API integration against isolated PostgreSQL, never production', async t =>
     assert.equal((await request('guest/save', preference)).status, 409);
     assert.equal((await request('guest/save', { ...preference, version: -1 })).status, 400);
     assert.equal((await request('guest/save', { ...preference, topic: 'restrictions', value: { allergyStatus: 'has' } })).status, 400);
-    assert.equal((await request('guest/save', { ...preference, topic: 'restrictions', value: { allergyStatus: 'has', allergens: 'test allergen' } })).status, 200);
+    const restrictions = await request('guest/save', { ...preference, topic: 'restrictions', value: { allergyStatus: 'has', restrictionType: 'allergy', allergenCategories: ['Ядки', '<script>'], allergens: 'test allergen' } });
+    assert.equal(restrictions.status, 200);
+    assert.deepEqual(restrictions.data.value.allergenCategories, ['Ядки']);
+    assert.equal(restrictions.data.value.restrictionType, 'allergy');
     const shared = await request('guest/shared', { token, topic: 'table', value: { selected: ['Плодове', '<script>alert(1)</script>'], note: 'test' } });
     assert.equal(shared.status, 200);
     assert.deepEqual(shared.data.value.selected, ['Плодове']);
