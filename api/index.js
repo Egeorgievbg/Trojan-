@@ -86,7 +86,7 @@ export default async function handler(req,res){
   const db=sql();
   if(req.method==='GET'&&path==='public'){
    const homes=await publicHomes(db);const [info]=await db`SELECT value FROM event_settings WHERE id=1`;
-   const event=info?.value||{};return send(res,200,{overview:{households:homes.length,participants:homes.reduce((sum,home)=>sum+home.members.length,0)},event:{dates:days,nights:2,arrival:event.arrival||'',departure:event.departure||'',bring:event.bring||''}});
+   return send(res,200,{overview:{households:homes.length,participants:homes.reduce((sum,home)=>sum+home.members.length,0)},event:{dates:days,nights:2}});
   }
   if(req.method==='POST'&&path==='guest/join'){
    const familyId=clean(body.familyId,55),invite=toToken(body.invite);
