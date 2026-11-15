@@ -59,8 +59,9 @@ test('API integration against isolated PostgreSQL, never production', async t =>
   await t.test('four households, fourteen participants, seven meal slots', async () => {
     const publicData = await request('public');
     assert.equal(publicData.status, 200);
-    assert.equal(publicData.data.families.length, 4);
-    assert.equal(publicData.data.families.flatMap(h => h.members).length, 14);
+    assert.deepEqual(publicData.data.overview, { households: 4, participants: 14 });
+    assert.equal('families' in publicData.data, false);
+    assert.equal(JSON.stringify(publicData.data).includes('Евгени'), false);
     assert.equal((await request('admin/overview', undefined, admin)).data.slots.length, 7);
   });
   await t.test('unauthorized admin, wrong allowlist and origin denied', async () => {
@@ -116,7 +117,9 @@ test('API integration against isolated PostgreSQL, never production', async t =>
     assert.equal((await request('guest/save', { ...preference, version: -1 })).status, 400);
     assert.equal((await request('guest/save', { ...preference, topic: 'restrictions', value: { allergyStatus: 'has' } })).status, 400);
     assert.equal((await request('guest/save', { ...preference, topic: 'restrictions', value: { allergyStatus: 'has', allergens: 'test allergen' } })).status, 200);
-    assert.equal((await request('guest/shared', { token, topic: 'table', value: { selected: ['Плодове'], note: 'test' } })).status, 200);
+    const shared = await request('guest/shared', { token, topic: 'table', value: { selected: ['Плодове', '<script>alert(1)</script>'], note: 'test' } });
+    assert.equal(shared.status, 200);
+    assert.deepEqual(shared.data.value.selected, ['Плодове']);
     const recovered = await request('guest/state', { token });
     assert.deepEqual(recovered.data.answers.ivelin.drinks.selected, ['Вода']);
     assert.equal(recovered.data.attendance.evgeni.status, 'yes');
@@ -135,23 +138,10 @@ test('API integration against isolated PostgreSQL, never production', async t =>
     assert.equal(updated.assignedTo, 'test');
     assert.equal((await request('admin/menu', { slotId: 'fake', recipeId: 'grill', portions: 10 }, admin)).status, 400);
   });
-  await t.test('authorized migration preview, backup, reconciliation and no overwrite', async () => {
-    const payload = { families: [{ id: 'family-evgeni', answers: { ivelin: { drinks: { selected: ['Сок'] } }, evgeni: { food: { selected: ['Пица'] } } }, rsvp: { statuses: { evgeni: 'no', iliyana: 'maybe' } } }] };
-    const preview = await request('admin/import-preview', payload, admin);
-    assert.equal(preview.status, 200);
-    assert.equal(preview.data.summary.existingPreferences, 1);
-    assert.equal((await request('admin/import', payload, admin)).status, 409);
-    const imported = await request('admin/import', { ...payload, confirm: true, expectedDigest: preview.data.digest }, admin);
-    assert.equal(imported.status, 200);
-    assert.deepEqual(imported.data.reconciliation, { expected: 2, inserted: 2 });
-    const archive = (await pg.query('SELECT payload FROM migration_archives')).rows[0].payload;
-    assert.ok(archive.source.families);
-    assert.ok(archive.backup.preferences.length);
-    const state = (await request('guest/state', { token })).data;
-    assert.deepEqual(state.answers.ivelin.drinks.selected, ['Вода']);
-    assert.equal(state.attendance.evgeni.status, 'yes');
-    const repeated = await request('admin/import', { ...payload, confirm: true, expectedDigest: preview.data.digest }, admin);
-    assert.equal(repeated.data.reconciliation.inserted, 0);
+  await t.test('legacy data import is intentionally unavailable', async () => {
+    assert.equal((await request('admin/import-preview', {}, admin)).status, 404);
+    assert.equal((await request('admin/import', {}, admin)).status, 404);
+    assert.equal((await pg.query('SELECT COUNT(*)::int AS count FROM migration_archives')).rows[0].count, 0);
   });
   await t.test('rotated invite revokes prior sessions and link', async () => {
     assert.equal((await request('admin/invite', { familyId: 'family-evgeni' }, admin)).status, 200);

@@ -15,7 +15,7 @@ const sql=()=>{if(!process.env.DATABASE_URL)throw Object.assign(new Error('DATAB
 const secret=()=>{if(SECRET.length<32)throw Object.assign(new Error('SESSION_SECRET не е конфигуриран.'),{status:503});return new TextEncoder().encode(SECRET);};
 const validHost=(req)=>{const origin=req.headers.origin;if(!origin)return true;try{return new URL(origin).host===req.headers.host}catch{return false}};
 const topics=['food','sides','drinks','restrictions','breakfast','desserts','extras'];
-const allowed={food:['Скара','Пилешко','Свинско печено','Телешко','Риба','Пица','Паста','Домашна гозба','Вегетарианско','Супа','Картофки','Бургери','Ориз','Сандвичи','Плодове','Палачинки'],sides:['Шопска салата','Руска салата','Зелена салата','Картофки','Туршия','Сирена','Мезета','Разядки','Печени зеленчуци'],drinks:['Вода','Безалкохолно','Сок','Кафе','Чай','Бира','Вино','Ракия','Уиски','Без алкохол','Какао','Мляко'],breakfast:['Баница','Мекици','Яйца','Палачинки','Сандвичи','Плодове','Кисело мляко','Кафе','Чай','Зърнена закуска'],desserts:['Торта','Шоколад','Плодове','Сладолед','Сладкиши','Баклава','Домашен сладкиш'],extras:['Настолни игри','Игри за децата','Музика','Танци','Мезета','Баница'],restrictions:[]};
+const allowed={food:['Скара','Пилешко','Свинско печено','Телешко','Риба','Пица','Паста','Домашна гозба','Вегетарианско','Супа','Картофки','Бургери','Ориз','Сандвичи','Плодове','Палачинки'],sides:['Шопска салата','Руска салата','Зелена салата','Картофки','Туршия','Сирена','Мезета','Разядки','Печени зеленчуци'],drinks:['Вода','Безалкохолно','Сок','Кафе','Чай','Бира','Вино','Ракия','Уиски','Без алкохол','Какао','Мляко'],breakfast:['Баница','Мекици','Яйца','Палачинки','Сандвичи','Плодове','Кисело мляко','Кафе','Чай','Зърнена закуска'],desserts:['Торта','Шоколад','Плодове','Сладолед','Сладкиши','Баклава','Домашен сладкиш'],extras:['Настолни игри','Игри за децата','Музика','Танци','Мезета','Баница'],restrictions:[],table:['Баница','Палачинки','Торта','Сирена','Скара','Шопска салата','Плодове'],organization:['Пазаруване','Готвене','Музика','Игри','Фотографии','Подаръци']};
 const adultDrinks=new Set(['Бира','Вино','Ракия','Уиски']);
 const days=['2026-12-31','2027-01-01','2027-01-02'];
 const pgDays=v=>'{'+v.filter(x=>days.includes(x)).join(',')+'}';
@@ -80,13 +80,13 @@ export default async function handler(req,res){
   if(req.method==='GET'&&path==='admin/me'){const who=await auth(req);return who?send(res,200,{email:who.email}):send(res,401,{message:'Не си влязъл.'});}
   if(req.method==='POST'&&path==='admin/logout'){cookieSet(res,'troian_admin','',0);return send(res,200,{ok:true});}
   if(path.startsWith('admin/')&&!await auth(req))return send(res,401,{message:'Само организаторът има достъп.'});
-  const routes={public:'GET','guest/join':'POST','guest/state':'POST','guest/attendance':'POST','guest/save':'POST','guest/shared':'POST','guest/trends':'POST','guest/coach':'POST','admin/overview':'GET','admin/invite':'POST','admin/menu':'POST','admin/purchase':'POST','admin/event':'POST','admin/import-preview':'POST','admin/import':'POST'};
+  const routes={public:'GET','guest/join':'POST','guest/state':'POST','guest/attendance':'POST','guest/save':'POST','guest/shared':'POST','guest/trends':'POST','guest/coach':'POST','admin/overview':'GET','admin/invite':'POST','admin/menu':'POST','admin/purchase':'POST','admin/event':'POST'};
   if(!routes[path])return send(res,404,{message:'Няма такъв маршрут.'});
   if(routes[path]!==req.method)return send(res,405,{message:'Непозволен метод.'});
   const db=sql();
   if(req.method==='GET'&&path==='public'){
    const homes=await publicHomes(db);const [info]=await db`SELECT value FROM event_settings WHERE id=1`;
-   const event=info?.value||{};return send(res,200,{families:homes,event:{dates:days,nights:2,arrival:event.arrival||'',departure:event.departure||'',bring:event.bring||''}});
+   const event=info?.value||{};return send(res,200,{overview:{households:homes.length,participants:homes.reduce((sum,home)=>sum+home.members.length,0)},event:{dates:days,nights:2,arrival:event.arrival||'',departure:event.departure||'',bring:event.bring||''}});
   }
   if(req.method==='POST'&&path==='guest/join'){
    const familyId=clean(body.familyId,55),invite=toToken(body.invite);
@@ -104,7 +104,7 @@ export default async function handler(req,res){
   if(req.method==='POST'&&path==='guest/attendance'){
    const home=await guest(req);if(!home)return send(res,401,{message:'Невалидна семейна сесия.'});
    const memberId=clean(body.personId,60),status=clean(body.status,10),chosenDays=Array.isArray(body.days)?body.days.filter(x=>days.includes(x)):[];
-   if(!['yes','maybe','no'].includes(status)||(status==='yes'&&chosenDays.length===0))return send(res,400,{message:'Избери присъствие.'});
+   if(!['yes','maybe','no'].includes(status)||(status!=='no'&&chosenDays.length===0))return send(res,400,{message:'Избери поне един ден за всеки участник, който може да дойде.'});
    const [member]=await db`SELECT id FROM members WHERE id=${memberId} AND household_id=${home}`;if(!member)return send(res,403,{message:'Чужд участник.'});
    const version=Number(body.version||0);if(!Number.isSafeInteger(version)||version<0)return send(res,400,{message:'Невалидна версия.'});
    const result=version===0?await db`INSERT INTO attendance(person_id,status,days,version) VALUES (${memberId},${status},${pgDays(chosenDays)}::text[],1) ON CONFLICT DO NOTHING RETURNING version`:await db`UPDATE attendance SET status=${status},days=${pgDays(chosenDays)}::text[],version=version+1,updated_at=NOW() WHERE person_id=${memberId} AND version=${version} RETURNING version`;
@@ -128,7 +128,7 @@ export default async function handler(req,res){
   if(req.method==='POST'&&path==='guest/shared'){
    const home=await guest(req);if(!home)return send(res,401,{message:'Необходима е семейна покана.'});
    const topic=clean(body.topic,24);if(!['table','organization'].includes(topic))return send(res,400,{message:'Невалидна обща тема.'});
-   const val=body.value||{},value={selected:Array.isArray(val.selected)?val.selected.filter(x=>typeof x==='string').slice(0,14).map(x=>clean(x,55)):[],note:clean(val.note,450),skipped:val.skipped===true};const version=Number(body.version||0);if(!Number.isSafeInteger(version)||version<0)return send(res,400,{message:'Невалидна версия.'});
+   const val=body.value||{},value={selected:Array.isArray(val.selected)?[...new Set(val.selected.filter(x=>typeof x==='string'&&allowed[topic].includes(x)))].slice(0,14):[],note:clean(val.note,450),skipped:val.skipped===true};const version=Number(body.version||0);if(!Number.isSafeInteger(version)||version<0)return send(res,400,{message:'Невалидна версия.'});
    const result=version===0?await db`INSERT INTO household_shared(household_id,topic,value,version) VALUES (${home},${topic},${JSON.stringify(value)},1) ON CONFLICT DO NOTHING RETURNING version`:await db`UPDATE household_shared SET value=${JSON.stringify(value)}::jsonb,version=version+1,updated_at=NOW() WHERE household_id=${home} AND topic=${topic} AND version=${version} RETURNING version`;
    if(!result.length)return send(res,409,{message:'Има по-нова семейна редакция.'});return send(res,200,{topic,value:{...value,version:result[0].version}});
   }
@@ -140,7 +140,7 @@ export default async function handler(req,res){
    const personId=clean(body.personId,60),topic=clean(body.topic,25);
    const [member]=await db`SELECT id,name,child FROM members WHERE id=${personId} AND household_id=${home}`;if(!member||!topics.includes(topic))return send(res,403,{message:'Непознат участник или тема.'});
    const map={food:'Какво би хапнал/а за основно?',sides:'Какви салати и мезета харесваш?',drinks:'Какво би пил/а?',restrictions:'Има ли алергии или храни, които трябва да избягваме?',breakfast:'Какво би хапнал/а за закуска?',desserts:'Какво обичаш за десерт?',extras:'Нещо допълнително за празника?'};
-   let text=map[topic];if(process.env.OPENAI_API_KEY){try{const r=await fetch('https://api.openai.com/v1/responses',{method:'POST',headers:{Authorization:'Bearer '+process.env.OPENAI_API_KEY,'Content-Type':'application/json'},body:JSON.stringify({model:'gpt-4.1-mini',input:[{role:'system',content:'Ти си учтив български AI асистент за новогодишна семейна анкета. Задай точно един кратък въпрос по темата. Не споменавай алкохол при дете.'},{role:'user',content:JSON.stringify({name:member.name,child:member.child,topic})}],max_output_tokens:110})});if(r.ok){const data=await r.json();text=data.output_text||data.output?.flatMap(x=>x.content||[]).map(x=>x.text).filter(Boolean).join(' ')||text;}}catch{}}
+   let text=map[topic];if(process.env.OPENAI_API_KEY){try{const r=await fetch('https://api.openai.com/v1/responses',{method:'POST',headers:{Authorization:'Bearer '+process.env.OPENAI_API_KEY,'Content-Type':'application/json'},body:JSON.stringify({model:'gpt-4.1-mini',input:[{role:'system',content:'Ти си учтив български AI асистент за новогодишна семейна анкета. Задай точно един кратък въпрос по темата. Не споменавай алкохол при дете.'},{role:'user',content:JSON.stringify({child:member.child,topic})}],max_output_tokens:110})});if(r.ok){const data=await r.json();text=data.output_text||data.output?.flatMap(x=>x.content||[]).map(x=>x.text).filter(Boolean).join(' ')||text;}}catch{}}
    return send(res,200,{intro:'Сега е ред на '+member.name+'.',question:clean(text,230)});
   }
   if(path.startsWith('admin/')||path.startsWith('auth/')){
@@ -151,6 +151,7 @@ export default async function handler(req,res){
     return send(res,200,{families:answers,event:settings?.value||{},slots,recipes,menu,shopping:bought});
    }
    if(req.method==='POST'&&path==='admin/invite'){
+    if(!base)return send(res,503,{message:'PUBLIC_BASE_URL не е конфигуриран.'});
     const familyId=clean(body.familyId,60),[home]=await db`SELECT id FROM households WHERE id=${familyId}`;if(!home)return send(res,404,{message:'Няма такова семейство.'});
     const invitation=random();await db.transaction([db`INSERT INTO invitations(household_id,token_hash,issued_at) VALUES (${familyId},${h(invitation)},NOW()) ON CONFLICT(household_id) DO UPDATE SET token_hash=EXCLUDED.token_hash,issued_at=NOW()`,db`DELETE FROM guest_sessions WHERE household_id=${familyId}`]);
     return send(res,200,{familyId,url:base+'/#invite='+encodeURIComponent(familyId+'.'+invitation),warning:'Новият линк заменя предишния за това семейство.'});
@@ -174,71 +175,6 @@ export default async function handler(req,res){
     return send(res,200,{event:current});
    }
 
-   if(req.method==='POST'&&(path==='admin/import-preview'||path==='admin/import')){
-    const groups=Array.isArray(body.families)?body.families:null;
-    if(!groups||groups.length<1||groups.length>4)return send(res,400,{message:'Очаквам между едно и четири домакинства.'});
-    const payload={families:groups,event:body.event||null,shopping:body.shopping||null,plan:body.plan||null};
-    const serialized=JSON.stringify(payload);
-    if(serialized.length>1000000)return send(res,413,{message:'Експортът е прекалено голям (максимум 1 MB).'});
-    const digest=h(serialized);
-    const existingPrefs=await db`SELECT person_id,topic FROM preferences`;
-    const existingAttendance=await db`SELECT person_id FROM attendance`;
-    const existingShared=await db`SELECT household_id,topic FROM household_shared`;
-    const prefKeys=new Set(existingPrefs.map(p=>p.person_id+'|'+p.topic));
-    const attendingIds=new Set(existingAttendance.map(a=>a.person_id));
-    const sharedKeys=new Set(existingShared.map(s=>s.household_id+'|'+s.topic));
-    const answers=[],rsvps=[],shared=[];
-    let unknown=0;
-    const seenFamilies=new Set();
-    for(const group of groups){
-      const familyId=clean(group?.id,60);
-      if(seenFamilies.has(familyId))return send(res,400,{message:'Дублирано домакинство в експорта.'});
-      seenFamilies.add(familyId);
-      const [family]=await db`SELECT id FROM households WHERE id=${familyId}`;
-      if(!family){unknown++;continue;}
-      const members=await db`SELECT id,child FROM members WHERE household_id=${familyId}`;
-      const valid=new Map(members.map(m=>[m.id,m]));
-      for(const [personId,topicMap] of Object.entries(group.answers||{})){
-       const member=valid.get(personId);
-       if(!member){unknown++;continue;}
-       if(!topicMap||typeof topicMap!=='object'||Array.isArray(topicMap)){unknown++;continue;}
-       for(const [topic,raw] of Object.entries(topicMap)){
-        if(!topics.includes(topic)||!raw||typeof raw!=='object'||Array.isArray(raw)){unknown++;continue;}
-        const selected=Array.isArray(raw.selected)?[...new Set(raw.selected.filter(x=>typeof x==='string'&&allowed[topic].includes(x)&&!(member.child&&topic==='drinks'&&adultDrinks.has(x))))].slice(0,16):[];
-        const status=['none','has','unknown'].includes(raw.allergyStatus)?raw.allergyStatus:'unknown';
-        const record={selected,note:clean(raw.note,450),allergyStatus:topic==='restrictions'?status:'unknown',allergens:topic==='restrictions'&&status==='has'?clean(raw.allergens,260):'',dislikes:topic==='restrictions'?clean(raw.dislikes,250):'',skipped:raw.skipped===true};
-        answers.push({personId,topic,record});
-       }
-      }
-      for(const [personId,status] of Object.entries(group.rsvp?.statuses||{})){
-       if(!valid.has(personId)||!['yes','maybe','no'].includes(status)){unknown++;continue;}
-       const rawDays=group.rsvp?.daysByPerson?.[personId]||group.rsvp?.days||[];
-       const dates=Array.isArray(rawDays)?rawDays.map(v=>({'31 декември':days[0],'1 януари':days[1],'2 януари':days[2]}[v]||v)).filter(v=>days.includes(v)):[];
-       rsvps.push({personId,status,dates:[...new Set(dates)]});
-      }
-      for(const [topic,raw] of Object.entries(group.shared||{})){
-       if(!['table','organization'].includes(topic)||!raw||typeof raw!=='object'||Array.isArray(raw)){unknown++;continue;}
-       shared.push({familyId,topic,record:{selected:Array.isArray(raw.selected)?raw.selected.filter(x=>typeof x==='string').slice(0,14).map(x=>clean(x,55)):[],note:clean(raw.note,450),skipped:raw.skipped===true}});
-      }
-    }
-    const pendingAnswers=answers.filter(x=>!prefKeys.has(x.personId+'|'+x.topic));
-    const pendingRsvps=rsvps.filter(x=>!attendingIds.has(x.personId));
-    const pendingShared=shared.filter(x=>!sharedKeys.has(x.familyId+'|'+x.topic));
-    const summary={households:seenFamilies.size,preferences:pendingAnswers.length,attendance:pendingRsvps.length,shared:pendingShared.length,existingPreferences:answers.length-pendingAnswers.length,existingAttendance:rsvps.length-pendingRsvps.length,existingShared:shared.length-pendingShared.length,ignored:unknown,archiveIncludesExtras:!!(body.event||body.shopping||body.plan)};
-    if(path==='admin/import-preview')return send(res,200,{ok:true,preview:true,digest,summary,warning:'Съществуващите записи няма да се презаписват. Меню, покупки и настройки се архивират, но не се активират автоматично.'});
-    if(body.confirm!==true||body.expectedDigest!==digest)return send(res,409,{message:'Първо прегледай импорта и потвърди непроменения файл.'});
-    const archiveId='appdeploy-v3-'+digest.slice(0,40);
-    const queries=[db`INSERT INTO migration_archives(source_id,payload,digest) VALUES (${archiveId},jsonb_build_object('source',${serialized}::jsonb,'backup',jsonb_build_object('attendance',(SELECT COALESCE(jsonb_agg(to_jsonb(a)),'[]'::jsonb) FROM attendance a),'preferences',(SELECT COALESCE(jsonb_agg(to_jsonb(p)),'[]'::jsonb) FROM preferences p),'shared',(SELECT COALESCE(jsonb_agg(to_jsonb(s)),'[]'::jsonb) FROM household_shared s))),${digest}) ON CONFLICT(source_id) DO NOTHING`];
-    for(const x of pendingAnswers)queries.push(db`INSERT INTO preferences(person_id,topic,value,version) VALUES (${x.personId},${x.topic},${JSON.stringify(x.record)}::jsonb,1) ON CONFLICT(person_id,topic) DO NOTHING RETURNING person_id`);
-    for(const x of pendingRsvps)queries.push(db`INSERT INTO attendance(person_id,status,days,version) VALUES (${x.personId},${x.status},${pgDays(x.dates)}::text[],1) ON CONFLICT(person_id) DO NOTHING RETURNING person_id`);
-    for(const x of pendingShared)queries.push(db`INSERT INTO household_shared(household_id,topic,value,version) VALUES (${x.familyId},${x.topic},${JSON.stringify(x.record)}::jsonb,1) ON CONFLICT(household_id,topic) DO NOTHING RETURNING household_id`);
-    const results=await db.transaction(queries);
-    let offset=1;
-    const count=n=>results.slice(offset,offset+=n).reduce((sum,rows)=>sum+rows.length,0);
-    const importedPreferences=count(pendingAnswers.length),importedAttendance=count(pendingRsvps.length),importedShared=count(pendingShared.length);
-    const reconciliation={expected:pendingAnswers.length+pendingRsvps.length+pendingShared.length,inserted:importedPreferences+importedAttendance+importedShared};
-    return send(res,200,{ok:true,archiveId,reconciliation,importedPreferences,importedAttendance,importedShared,summary,warning:'Исторически данни за меню и покупки са запазени в архива за ръчна сверка. Не са презаписани активните записи.'});
-   }
   }
   return send(res,404,{message:'Няма такъв маршрут.'});
  }catch(e){console.error('api request failed',{path,name:e?.name||'Error'});return send(res,e?.status||500,{message:e?.status?e.message:'Вътрешна грешка. Провери настройките на сървъра.'});}

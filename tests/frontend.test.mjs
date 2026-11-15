@@ -17,7 +17,7 @@ function browser() {
         querySelector() { return close; }, querySelectorAll() { return [previous, next]; }, previous, next };
     }
   };
-  const context = vm.createContext({ document, window: { addEventListener() {} }, console, URL, Date, setTimeout });
+  const context = vm.createContext({ document, window: { addEventListener() {} }, console, URL, Date, setTimeout, clearTimeout });
   vm.runInContext(source, context);
   return { state, app, run: code => vm.runInContext(code, context) };
 }
@@ -48,6 +48,23 @@ test('malformed invitation displays error without crashing', async () => {
   const { app, run } = browser();
   await run('fromInvite("#invite=%E0%A4%A")');
   assert.match(app.innerHTML, /Невалиден семеен линк/);
+});
+
+test('public home uses generic household cards and the review is explicit', () => {
+  const { app, run } = browser();
+  run('publicOverview={households:2,participants:3}; renderHome()');
+  assert.match(app.innerHTML, /Домакинство 01/);
+  assert.doesNotMatch(app.innerHTML, /Евгени|Илияна|Ивелин|Веско|Деси|Наката/);
+  run(`guest={family:{id:'family-test',title:'Тестово домакинство',members:[{id:'adult',name:'Възрастен',child:false},{id:'child',name:'Дете',child:true}]},attendance:{adult:{status:'yes',days:[DATES[0]]},child:{status:'yes',days:[DATES[0]]}},answers:{},shared:{},event:{}}; guestStep=guestSteps().length-1; renderGuest()`);
+  assert.match(app.innerHTML, /Потвърждавам отговорите/);
+  assert.match(app.innerHTML, /Редакция/);
+});
+
+test('child drink screen excludes alcoholic choices', () => {
+  const { app, run } = browser();
+  run(`guest={family:{id:'family-test',title:'Тестово домакинство',members:[{id:'child',name:'Дете',child:true}]},attendance:{child:{status:'yes',days:[DATES[0]]}},answers:{},shared:{},event:{}}; selectGuestStage(guestSteps().findIndex(step=>step.person?.id==='child'&&step.topic==='drinks'))`);
+  assert.doesNotMatch(app.innerHTML, /Бира|Вино|Ракия|Уиски/);
+  assert.match(app.innerHTML, /Вода/);
 });
 
 test('organizer sees escaped allergy details and notes', () => {
