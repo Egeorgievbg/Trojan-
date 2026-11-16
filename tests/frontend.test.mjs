@@ -50,6 +50,12 @@ test('malformed invitation displays error without crashing', async () => {
   assert.match(app.innerHTML, /Невалиден семеен линк/);
 });
 
+test('validation errors do not show a duplicate generic save failure', () => {
+  const { run } = browser();
+  run(`saveState='error'; error='Избери присъствие за всеки човек.';`);
+  assert.equal(run('saveStateLabel()'), '');
+});
+
 test('public home uses generic household cards and the review is explicit', () => {
   const { app, run } = browser();
   run('publicOverview={households:2,participants:3}; renderHome()');
