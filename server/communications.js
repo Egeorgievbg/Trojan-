@@ -90,7 +90,7 @@ export async function notifyOrganizerOfSubmission(db, title) {
   const targets=await pushRecipients(db,'admin',null,'announcements');
   if(!targets.length) return;
   await notify(db,targets,{title:'Троян 2027 · Нова анкета',
-    body:'Потвърдена е анкета от '+clean(title,80)+'.',url:'/#admin',category:'announcements'},
+    body:'Получена е нова потвърдена анкета.',url:'/#admin',category:'announcements'},
     null,'announcements');
 }
 export async function handleCommunications(req, res, path, db, { role, householdId=null, actor='', json }) {
