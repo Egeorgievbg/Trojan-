@@ -271,3 +271,15 @@ html:has(.t27-guest) { scroll-padding-block: 125px 84px; }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
 }
+
+
+/* TROJAN 2027: confirmation and overnight selection */
+.t27-thankyou{display:grid;gap:1.15rem;margin-top:1.6rem}
+.t27-thankyou-hero{position:relative;overflow:hidden;background:linear-gradient(135deg,#eef8ef,#fff4e3);border:1px solid rgba(20,76,49,.15)}
+.t27-thankyou-hero h2{font-size:clamp(1.5rem,4vw,2.5rem);line-height:1.15;margin:.3rem 0}
+.t27-thankyou-confetti{position:absolute;right:1.4rem;top:1rem;color:#af7a38;font-size:1.6rem;letter-spacing:.25em;pointer-events:none}
+.t27-contribution-list{display:grid;gap:.5rem;list-style:none;padding:0;margin:0}
+.t27-contribution-list li{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:.5rem;border-bottom:1px solid rgba(20,76,49,.1);padding:.7rem 0}
+.t27-overnight{padding:1rem;border-radius:1rem;background:rgba(32,104,76,.05);margin-block:1rem}
+.t27-overnight>.t27-help{margin:.35rem 0 .7rem}
+@media(max-width:600px){.t27-thankyou-hero{padding:1.1rem}.t27-contribution-list li{display:block}.t27-contribution-list li span{display:block;margin-top:.25rem}}
