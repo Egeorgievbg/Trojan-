@@ -1,9 +1,10 @@
 import { DAYS, MEALS, RECIPES } from '../public/event-catalog.js';
 import { RequestError, clean, array, object } from './v2-data.js';
+import { answerFromEventData } from './event-helper.js';
 
 // Read-only, household-scoped assistant. The model receives no chat history, cookies, tokens, or allergies.
 export async function answerEventQuestion(db, householdId, raw) {
-  if (!process.env.OPENAI_API_KEY) throw new RequestError(503,'AI асистентът още не е конфигуриран. Използвай личния чат с организаторите.');
+  // Without a provider key the authenticated data assistant still works, transparently.
   const question=clean(raw?.question,500);
   if (!question || question.length < 3) throw new RequestError(400,'Напиши конкретен въпрос за събитието.');
   const [rate] = await db`SELECT count(*)::integer AS total FROM t27_ai_requests
@@ -43,6 +44,8 @@ export async function answerEventQuestion(db, householdId, raw) {
     myHousehold:{hasConfirmedSurvey:!!own.submitted_at,participants:myParticipants},
     availableMeals:MEALS.map(x=>({id:x.id,title:x.title,date:x.day})),plannedMeals,sharedContributions:shared
   };
+  const fallback = answerFromEventData(context, question);
+  if (!process.env.OPENAI_API_KEY) return fallback;
   const model=/^[a-zA-Z0-9._-]{1,64}$/.test(process.env.OPENAI_CHAT_MODEL||'')
     ? process.env.OPENAI_CHAT_MODEL : 'gpt-4.1-mini';
   const instructions=[
@@ -62,11 +65,11 @@ export async function answerEventQuestion(db, householdId, raw) {
       body:JSON.stringify({model,instructions,input:question+'\n--- ДОСТЪПНИ ДАННИ ---\n'+JSON.stringify(context),
         max_output_tokens:400,store:false})
     });
-  } catch { throw new RequestError(503,'AI доставчикът не отговаря. Опитай по-късно.'); }
-  if (!response.ok) throw new RequestError(503,'AI доставчикът временно не е достъпен.');
+  } catch { return {...fallback, notice:'Външният AI доставчик не отговаря. Получаваш проверени данни от приложението.'}; }
+  if (!response.ok) return {...fallback, notice:'AI услугата е временно недостъпна. Показвам проверена информация от организацията.'};
   const json=await response.json().catch(() => ({}));
   const answer=array(json.output).flatMap(item => array(item.content).filter(part=>part.type==='output_text')
     .map(part=>part.text)).filter(x=>typeof x==='string').join('\n').trim().slice(0,2400);
-  if(!answer) throw new RequestError(503,'Няма получен AI отговор.');
-  return {answer,generatedAt:new Date().toISOString(),source:'event-data'};
+  if(!answer) return {...fallback, notice:'AI не върна отговор. Показвам проверена информация от приложението.'};
+  return {answer,generatedAt:new Date().toISOString(),source:'ai-model',mode:'ai'};
 }
