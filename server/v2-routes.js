@@ -61,9 +61,12 @@ function forMembers(draft, family) {
 }
 
 async function guestBundle(db, id, settings, legacyState) {
-  const [[family], record, event, photoRows] = await Promise.all([
+  const [[family], record, event, photoRows, contributions] = await Promise.all([
     families(db, id), recordFor(db, id), eventSettings(db),
-    db`SELECT recipe_id FROM t27_dish_photos`
+    db`SELECT recipe_id FROM t27_dish_photos`,
+    db`SELECT h.title AS household, s.submitted->'shared'->'contributions' AS items
+      FROM t27_surveys s JOIN households h ON h.id = s.household_id
+      WHERE h.archived_at IS NULL AND s.submitted_revision IS NOT NULL`
   ]);
   if (!family) throw new RequestError(401, 'Поканата вече не е активна.');
   const questionnaireVersion = record?.questionnaire_version ?? settings.active_version;
@@ -80,6 +83,12 @@ async function guestBundle(db, id, settings, legacyState) {
     draft: record ? forMembers(record.draft, family) : historic.profile,
     legacyChoices: historic?.ambiguous ?? {},
     dishPhotos: photoRows.map(row => row.recipe_id),
+    // Само изрично заявени общи приноси. Личните хранителни предпочитания остават поверителни.
+    sharedContributions: contributions.flatMap(row => array(row.items).map(item => ({
+      household: row.household, label: clean(item.label, 100),
+      recipeId: clean(item.recipeId, 64), quantity: item.quantity, unit: item.unit,
+      mealId: clean(item.mealId, 64)
+    }))).filter(item => item.label || item.recipeId).slice(0, 120),
     event: Object.fromEntries(['address', 'navigation', 'arrival', 'departure', 'bring', 'notes', 'mealTimes']
       .filter(key => event[key] !== undefined).map(key => [key, event[key]]))
   };
@@ -218,7 +227,7 @@ async function saveEvent(db, body) {
   const program = object(body.mealTimes);
   const chores = object(body.chores);
   const event = {
-    ...previous, dates: DAYS.map(day => day.id), nights: 2,
+    ...previous, dates: DAYS.map(day => day.id), nights: DAYS.length - 1,
     address: clean(body.address), navigation: validNavigation(clean(body.navigation, 390)),
     arrival: clean(body.arrival, 90), departure: clean(body.departure, 90),
     bring: clean(body.bring, 650), notes: clean(body.notes, 650),
