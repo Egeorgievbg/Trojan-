@@ -1,7 +1,7 @@
 import { partyApi, escapeHtml as e, stamp } from './party-ui.js';
 
 export function createAdminComms(app, alive, on, rerender) {
-  let families=null, selected='', conversation=[], logs=null, loading=false, busy=false, error='', notice='';
+  let families=null, selected='', conversation=[], logs=null, configured=null, loading=false, busy=false, error='', notice='';
   const label = id => families?.find(item => item.id === id)?.title || id;
   async function loadFamilies() {
     if(loading) return;
@@ -23,7 +23,7 @@ export function createAdminComms(app, alive, on, rerender) {
   async function loadLogs() {
     if(loading) return;
     loading=true;
-    try { const r=await partyApi('admin/notifications');logs=r.logs||[];error=''; }
+    try { const r=await partyApi('admin/notifications');logs=r.logs||[];configured=r.configured === true;error=''; }
     catch(err) { error=err.message; }
     finally { loading=false; if(alive())rerender(); }
   }
@@ -61,6 +61,7 @@ export function createAdminComms(app, alive, on, rerender) {
     const items=(data?.families||[]).filter(x=>!x.family.archived_at).map(x=>x.family);
     return `<section class="t27-stack"><h2>Център за известия</h2>${banner()}
       <p class="t27-help">Изпращай само на гости, които доброволно са разрешили известията. Без абонамент се показва резултат „0 получатели“.</p>
+      ${configured === false ? '<p class="t27-notice" role="status">Изпращането на push е изключено: липсва VAPID конфигурация във Vercel. Съобщенията в приложението продължават да работят.</p>' : ''}
       <form data-admin-notify class="t27-card t27-stack">
         <label class="t27-field">Получател<select name="householdId">
           <option value="">Всички абонирани участници</option>
@@ -79,7 +80,7 @@ export function createAdminComms(app, alive, on, rerender) {
           <option value="/thank-you">Моите отговори</option>
           <option value="/">Начало</option>
         </select></label>
-        <button type="submit" class="t27-btn t27-btn--primary" ${busy?'disabled':''}>Изпрати известие</button>
+        <button type="submit" class="t27-btn t27-btn--primary" ${busy || configured !== true ? 'disabled' : ''}>Изпрати известие</button>
       </form>
       <section class="t27-card"><h3>Последни изпращания</h3>
         ${logs===null ? '<p>Зареждаме историята…</p>' : logs.length ? `<div class="t27-stack">${logs.map(item => `
@@ -110,7 +111,7 @@ export function createAdminComms(app, alive, on, rerender) {
           title:form.elements.title.value,body:form.elements.body.value,url:form.elements.url.value
         });
         notice=`Приети от push услугата: ${r.accepted}; неуспешни: ${r.failed}; изтекли: ${r.expired}; абонаменти: ${r.subscribers}.`;
-        const result=await partyApi('admin/notifications');logs=result.logs||[];
+        const result=await partyApi('admin/notifications');logs=result.logs||[];configured=result.configured === true;
       }
     } catch(err) { error=err.message; }
     finally { busy=false;if(alive())rerender(); }
