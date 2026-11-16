@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { handleCommunications } from './communications.js';
 import { isDeepStrictEqual } from 'node:util';
 import {
   DEFAULT_DEFINITION, DAYS, MEALS, RECIPES, TASKS, appliesToMeal
@@ -245,9 +246,17 @@ async function saveEvent(db, body) {
   return event;
 }
 
+const communicationPaths = new Set(['messages','message','messages/read','push/config','push/subscribe','push/unsubscribe']);
+const adminCommunicationPaths = new Set([...communicationPaths,'notifications','notifications/send']);
+
 const methods = {
   'guest/join': 'POST', 'guest/state': 'GET', 'guest/draft': 'POST', 'guest/confirm': 'POST',
   'guest/leave': 'POST', 'guest/photo': 'GET', 'dish-photo': 'GET',
+  'guest/messages': 'GET', 'guest/message': 'POST', 'guest/messages/read': 'POST',
+  'guest/push/config': 'GET', 'guest/push/subscribe': 'POST', 'guest/push/unsubscribe': 'POST',
+  'admin/messages': 'GET', 'admin/message': 'POST', 'admin/messages/read': 'POST',
+  'admin/push/config': 'GET', 'admin/push/subscribe': 'POST', 'admin/push/unsubscribe': 'POST',
+  'admin/notifications': 'GET', 'admin/notifications/send': 'POST',
   'admin/overview': 'GET', 'admin/history': 'GET', 'admin/family': 'POST', 'admin/member': 'POST',
   'admin/invite': 'POST', 'admin/photo': 'GET', 'admin/family-photo': 'POST', 'admin/dish-photo': 'POST',
   'admin/questionnaire': 'POST', 'admin/publish': 'POST', 'admin/menu': 'POST',
@@ -292,6 +301,7 @@ export async function handleV2(req, res, path, db, dependencies) {
     const id = await guestSession(db, tokenHash);
     if (!id) return json(res, 401, { message: 'Отвори отново личния семеен линк от Viber.' });
     if (path === 'guest/photo') return servePhoto(db, res, id, 'household');
+    if (communicationPaths.has(path.slice('guest/'.length))) return handleCommunications(req,res,path,db,{role:'guest',householdId:id,json});
     if (path === 'guest/state') return json(res, 200, await guestBundle(db, id, settings, legacyState));
     return json(res, 200, await saveSurvey(db, id, body, settings, legacyState, path === 'guest/confirm'));
   }
@@ -301,6 +311,7 @@ export async function handleV2(req, res, path, db, dependencies) {
     return servePhoto(db, res, clean(req.query?.id, 64), 'dish');
   }
   if (!organizer) return json(res, 401, { message: 'Само организаторът има достъп.' });
+  if (adminCommunicationPaths.has(path.slice('admin/'.length))) return handleCommunications(req,res,path,db,{role:'admin',actor:String(organizer.email||''),json});
 
   if (path === 'admin/overview') return json(res, 200, await planner(db, settings, legacyRecipes));
   if (path === 'admin/history') {
