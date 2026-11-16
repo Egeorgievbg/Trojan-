@@ -13,7 +13,9 @@ export class ApiError extends Error {
 
 export async function partyApi(path, body) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 12000);
+  // AI provider may require up to 15 s. A 12 s client timeout aborted valid replies first.
+  const timeoutMs = path === 'guest/ai' ? 22000 : 12000;
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const result = await fetch('/api/v2/' + path, {
       credentials: 'same-origin', cache: 'no-store', signal: controller.signal,

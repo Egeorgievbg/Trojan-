@@ -40,6 +40,9 @@ export function homePage(overview, photos, countdown) {
             <button class="home-btn home-btn--gold" data-action="family">Попълни за семейството ${icon('next')}</button>
             <a class="home-btn home-btn--ghost" href="#villa">${icon('camera')} Разгледай вилата</a>
           </div>
+          <div class="home-hero-micro" aria-label="Основни факти за събирането">
+            <span>4 ДНИ</span><span>3 НОЩУВКИ</span><span>9 ХРАНЕНИЯ</span>
+          </div>
         </div>
         <div class="home-event-line">
           <span>${icon('pin')} Троян, България</span>
