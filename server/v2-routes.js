@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { handleCommunications } from './communications.js';
+import { answerEventQuestion } from './ai-assistant.js';
 import { isDeepStrictEqual } from 'node:util';
 import {
   DEFAULT_DEFINITION, DAYS, MEALS, RECIPES, TASKS, appliesToMeal
@@ -252,7 +253,7 @@ const adminCommunicationPaths = new Set([...communicationPaths,'notifications','
 const methods = {
   'guest/join': 'POST', 'guest/state': 'GET', 'guest/draft': 'POST', 'guest/confirm': 'POST',
   'guest/leave': 'POST', 'guest/photo': 'GET', 'dish-photo': 'GET',
-  'guest/messages': 'GET', 'guest/message': 'POST', 'guest/messages/read': 'POST',
+  'guest/ai': 'POST', 'guest/messages': 'GET', 'guest/message': 'POST', 'guest/messages/read': 'POST',
   'guest/push/config': 'GET', 'guest/push/subscribe': 'POST', 'guest/push/unsubscribe': 'POST',
   'admin/messages': 'GET', 'admin/message': 'POST', 'admin/messages/read': 'POST',
   'admin/push/config': 'GET', 'admin/push/subscribe': 'POST', 'admin/push/unsubscribe': 'POST',
@@ -303,6 +304,7 @@ export async function handleV2(req, res, path, db, dependencies) {
     if (path === 'guest/photo') return servePhoto(db, res, id, 'household');
     if (communicationPaths.has(path.slice('guest/'.length))) return handleCommunications(req,res,path,db,{role:'guest',householdId:id,json});
     if (path === 'guest/state') return json(res, 200, await guestBundle(db, id, settings, legacyState));
+    if (path === 'guest/ai') return json(res,200,await answerEventQuestion(db,id,body));
     return json(res, 200, await saveSurvey(db, id, body, settings, legacyState, path === 'guest/confirm'));
   }
   const organizer = await auth(req);
