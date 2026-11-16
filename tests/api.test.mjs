@@ -61,7 +61,7 @@ test('API integration against isolated PostgreSQL, never production', async t =>
     assert.equal(publicData.status, 200);
     assert.deepEqual(publicData.data.overview, { households: 4, participants: 14 });
     assert.equal('families' in publicData.data, false);
-    assert.equal(JSON.stringify(publicData.data).includes('Евгени'), false);
+    assert.equal(JSON.stringify(publicData.data).includes('Гост А1'), false);
     assert.equal((await request('admin/overview', undefined, admin)).data.slots.length, 7);
   });
   await t.test('unauthorized admin, wrong allowlist and origin denied', async () => {
@@ -88,28 +88,28 @@ test('API integration against isolated PostgreSQL, never production', async t =>
   });
   let token, invite;
   await t.test('private invitation, invalid invitations, scoped state and recovery', async () => {
-    assert.equal((await request('guest/join', { familyId: 'family-evgeni', invite: 'invalid' })).status, 401);
+    assert.equal((await request('guest/join', { familyId: 'household-a', invite: 'invalid' })).status, 401);
     assert.equal((await request('guest/state', { token: 'invalid' })).status, 401);
-    const link = await request('admin/invite', { familyId: 'family-evgeni' }, admin);
+    const link = await request('admin/invite', { familyId: 'household-a' }, admin);
     assert.equal(link.status, 200);
     invite = new URL(link.data.url).hash.split('.').at(-1);
-    const joined = await request('guest/join', { familyId: 'family-evgeni', invite });
+    const joined = await request('guest/join', { familyId: 'household-a', invite });
     assert.equal(joined.status, 200);
     token = joined.data.token;
     const state = await request('guest/state', { token });
-    assert.equal(state.data.family.id, 'family-evgeni');
+    assert.equal(state.data.family.id, 'household-a');
     assert.equal(state.data.family.members.length, 3);
-    assert.deepEqual(Object.keys(state.data.answers).sort(), ['evgeni','iliyana','ivelin']);
+    assert.deepEqual(Object.keys(state.data.answers).sort(), ['adult-a1','adult-a2','child-a3']);
     assert.deepEqual((await request('guest/state', { token })).data, state.data);
-    assert.equal((await request('guest/save', { token, personId: 'vesko', topic: 'food', value: {} })).status, 403);
-    assert.equal((await request('guest/attendance', { token, personId: 'vesko', status: 'yes', days: ['2026-12-31'] })).status, 403);
+    assert.equal((await request('guest/save', { token, personId: 'adult-d1', topic: 'food', value: {} })).status, 403);
+    assert.equal((await request('guest/attendance', { token, personId: 'adult-d1', status: 'yes', days: ['2026-12-31'] })).status, 403);
   });
   await t.test('RSVP, version conflicts, preferences, child drinks and allergies', async () => {
-    const attendance = { token, personId: 'evgeni', status: 'yes', days: ['2026-12-31'] };
+    const attendance = { token, personId: 'adult-a1', status: 'yes', days: ['2026-12-31'] };
     assert.equal((await request('guest/attendance', { ...attendance, days: [] })).status, 400);
     assert.equal((await request('guest/attendance', attendance)).status, 200);
     assert.equal((await request('guest/attendance', attendance)).status, 409);
-    const preference = { token, personId: 'ivelin', topic: 'drinks', value: { selected: ['Вода','Бира','Ракия','unlisted'] } };
+    const preference = { token, personId: 'child-a3', topic: 'drinks', value: { selected: ['Вода','Бира','Ракия','unlisted'] } };
     const saved = await request('guest/save', preference);
     assert.equal(saved.status, 200);
     assert.deepEqual(saved.data.value.selected, ['Вода']);
@@ -124,8 +124,8 @@ test('API integration against isolated PostgreSQL, never production', async t =>
     assert.equal(shared.status, 200);
     assert.deepEqual(shared.data.value.selected, ['Плодове']);
     const recovered = await request('guest/state', { token });
-    assert.deepEqual(recovered.data.answers.ivelin.drinks.selected, ['Вода']);
-    assert.equal(recovered.data.attendance.evgeni.status, 'yes');
+    assert.deepEqual(recovered.data.answers['child-a3'].drinks.selected, ['Вода']);
+    assert.equal(recovered.data.attendance['adult-a1'].status, 'yes');
   });
   await t.test('shopping quantities aggregate and preserve bought markers', async () => {
     let result = await request('admin/menu', { slotId: '31-dinner', recipeId: 'grill', portions: 10 }, admin);
@@ -147,9 +147,9 @@ test('API integration against isolated PostgreSQL, never production', async t =>
     assert.equal((await pg.query('SELECT COUNT(*)::int AS count FROM migration_archives')).rows[0].count, 0);
   });
   await t.test('rotated invite revokes prior sessions and link', async () => {
-    assert.equal((await request('admin/invite', { familyId: 'family-evgeni' }, admin)).status, 200);
+    assert.equal((await request('admin/invite', { familyId: 'household-a' }, admin)).status, 200);
     assert.equal((await request('guest/state', { token })).status, 401);
-    assert.equal((await request('guest/join', { familyId: 'family-evgeni', invite })).status, 401);
+    assert.equal((await request('guest/join', { familyId: 'household-a', invite })).status, 401);
   });
   await pg.close();
 });

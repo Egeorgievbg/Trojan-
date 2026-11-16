@@ -1,6 +1,10 @@
-import {rm,mkdir,cp,copyFile,access} from 'node:fs/promises';
+import {rm,mkdir,cp,copyFile,access,readdir} from 'node:fs/promises';
 import {execFileSync} from 'node:child_process';
-for(const file of ['public/app.js','api/index.js'])execFileSync(process.execPath,['--check',file],{stdio:'inherit'});
+for (const folder of ['api', 'public', 'server']) {
+  for (const file of await readdir(folder)) {
+    if (file.endsWith('.js')) execFileSync(process.execPath, ['--check', folder + '/' + file], { stdio: 'inherit' });
+  }
+}
 const names={
 'aerial.jpg':'villa-aerial.jpg',
 'veranda.jpg':'villa-veranda.jpg',

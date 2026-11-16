@@ -1,0 +1,35 @@
+name: Trojan quality checks
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, webkit]
+    env:
+      TROJAN_BROWSER: ${{ matrix.browser }}
+      TROJAN_SCREENSHOTS: /tmp/trojan-qa
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npx playwright install --with-deps ${{ matrix.browser }}
+      - run: npm run test:browser
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: trojan-${{ matrix.browser }}-screens
+          path: /tmp/trojan-qa
+          if-no-files-found: ignore

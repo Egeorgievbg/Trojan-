@@ -79,12 +79,55 @@ async function savePurchase(id,bought=null,assignedTo=null){const item=adminData
 async function saveEvent(){const value=Object.fromEntries([...app.querySelectorAll('[data-setting]')].map(x=>[x.dataset.setting,x.value]));try{await api('admin/event',value);adminData=await api('admin/overview');message='Информацията за вилата е запазена.';renderAdmin()}catch(e){error=e.message;renderAdmin()}}
 function exportShopping(){const rows=[['Продукт','Категория','Количество','Единица','Купено','Отговорник'],...adminData.shopping.map(x=>[x.name,x.category,String(x.quantity),x.unit,x.bought?'Да':'Не',x.assignedTo])];const csv='\ufeff'+rows.map(r=>r.map(x=>'"'+String(x).replace(/"/g,'""')+'"').join(',')).join('\r\n');const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));const link=document.createElement('a');link.href=url;link.download='troian-pazaruvane.csv';link.click();URL.revokeObjectURL(url)}
 window.addEventListener('keydown',e=>{if(!document.getElementById('lightbox'))return;if(e.key==='Escape')closePhoto();else if(e.key==='ArrowLeft'||e.key==='ArrowRight'){const next=(photoIndex+(e.key==='ArrowRight'?1:-1)+PHOTO.length)%PHOTO.length;closePhoto();showPhoto(next)}});
-window.addEventListener('hashchange',()=>{if(location.hash==='#admin')showAdmin();else if(location.hash.startsWith('#invite='))fromInvite(location.hash);});
+let surveyV2 = false;
+let guestScreen = null;
+let organizerScreen = null;
+let pathGeneration = 0;
+
+function leaveV2Screen() {
+  pathGeneration++;
+  guestScreen?.dispose();
+  organizerScreen?.dispose();
+  guestScreen = null;
+  organizerScreen = null;
+}
+
+function openHome() {
+  leaveV2Screen();
+  history.replaceState(null, '', location.pathname);
+  renderHome();
+}
+
+async function openSurvey(link = '') {
+  if (!surveyV2) {
+    if (link) return fromInvite(link);
+    return guest ? renderGuest() : renderNoInvite();
+  }
+  leaveV2Screen();
+  const opened = pathGeneration;
+  const { mountGuest } = await import('./survey.js');
+  if (opened !== pathGeneration) return;
+  guestScreen = mountGuest({ app, link, onHome: openHome });
+}
+
+window.addEventListener('hashchange', () => {
+  if (location.hash === '#admin') showAdmin();
+  else if (location.hash.startsWith('#invite=')) openSurvey(location.hash);
+  else if (location.hash === '#survey') openSurvey();
+  else if (surveyV2 && (guestScreen || organizerScreen)) {
+    leaveV2Screen();
+    renderHome();
+  }
+});
 async function init(){
  let ready=true;
+ purgeOldGuestStorage();
+ const readiness = api('v2/status').then(value => { surveyV2 = value.available === true; }).catch(() => {});
  try{const data=await api('public');publicOverview=data.overview||publicOverview;eventInfo=data.event||{};}
- catch{publicOverview={households:4,participants:14};ready=false;}
- if(location.hash.startsWith('#invite='))await fromInvite(location.hash);
+ catch{publicOverview={households:0,participants:0};ready=false;}
+ await readiness;
+ if(location.hash.startsWith('#invite='))await openSurvey(location.hash);
+ else if(location.hash==='#survey')await openSurvey();
  else if(location.hash==='#admin')await showAdmin();
  else {
   renderHome();
@@ -100,7 +143,15 @@ async function init(){
 }
 
 /* Production UX layer: private guest state, resilient drafts and a review-first flow. */
-function browserStorage(){try{return typeof window!=='undefined'&&window.localStorage?window.localStorage:null;}catch{return null;}}
+function purgeOldGuestStorage() {
+  try {
+    const storage = window.localStorage;
+    for (const key of Object.keys(storage)) {
+      if (/^troian_(guest_|state_v2:|draft_v2:|attendance_v2:|last_home$)/.test(key)) storage.removeItem(key);
+    }
+  } catch {}
+}
+function browserStorage(){return null;}
 function readStored(key){const store=browserStorage();if(!store)return null;try{const raw=store.getItem(key);return raw?JSON.parse(raw):null;}catch{return null;}}
 function writeStored(key,value){const store=browserStorage();if(!store)return;try{store.setItem(key,JSON.stringify(value));}catch{}}
 function removeStored(key){const store=browserStorage();if(!store)return;try{store.removeItem(key);}catch{}}
@@ -231,10 +282,10 @@ async function loadGuest(token,homeId){
  try{guestToken=token;guest=await api('guest/state',{token});mergeLocalAttendance();saveGuestSnapshot(homeId);writeStored('troian_guest_'+homeId,token);writeStored('troian_last_home',homeId);guestStep=0;saveState='idle';selectGuestStage(0);}catch(e){const cached=readStored(snapshotKey(homeId));if(cached?.family){guest=cached;mergeLocalAttendance();guestStep=0;saveState='error';error='Временна загуба на връзката. Показваме последно запазеното състояние; промените ще се изпратят при възстановяване.';selectGuestStage(0);return;}guest=null;error=e.message;renderNoInvite();}
 }
 async function actions(name){
- if(name==='home'){history.replaceState(null,'',location.pathname);error='';message='';renderHome();return;}
+ if(name==='home'){error='';message='';openHome();return;}
  if(name==='villa'||name==='program'){renderHome();return;}
- if(name==='family'){if(guest)return renderGuest();const home=readStored('troian_last_home');const token=home&&readStored('troian_guest_'+home);if(token){await loadGuest(token,home);return;}renderNoInvite();return;}
- if(name==='admin'){location.hash='admin';await showAdmin();return;}
+ if(name==='family')return openSurvey();
+ if(name==='admin'){if(location.hash==='#admin')await showAdmin();else location.hash='admin';return;}
  if(name==='back'){captureDraft();selectGuestStage(guestStep-1);return;}
  if(name==='next')return next(false);
  if(name==='skip')return next(true);
@@ -274,6 +325,14 @@ function renderAdmin(){
  attach();app.querySelectorAll('[data-tab]').forEach(button=>button.onclick=()=>{adminTab=button.dataset.tab;error='';message='';renderAdmin()});app.querySelectorAll('[data-invite]').forEach(button=>button.onclick=()=>createInvite(button.dataset.invite));app.querySelectorAll('[data-save-recipe]').forEach(button=>button.onclick=()=>saveRecipe(button.dataset.saveRecipe));app.querySelectorAll('[data-purchase]').forEach(button=>button.onchange=()=>savePurchase(button.dataset.purchase,button.checked));app.querySelectorAll('[data-assignee]').forEach(input=>input.onblur=()=>savePurchase(input.dataset.assignee,null,input.value));app.querySelector('[data-save-event]')?.addEventListener('click',saveEvent);app.querySelector('[data-logout]')?.addEventListener('click',async()=>{await api('admin/logout',{});adminData=null;location.hash='';renderHome()});app.querySelector('[data-export]')?.addEventListener('click',exportShopping);
 }
 async function showAdmin(){
+ if (surveyV2) {
+  leaveV2Screen();
+  const opened = pathGeneration;
+  const { mountOrganizer } = await import('./organizer.js');
+  if (opened !== pathGeneration) return;
+  organizerScreen = mountOrganizer({ app, onHome: openHome });
+  return;
+ }
  error='';message='';app.innerHTML=banner()+'<main class="loading-shell" aria-live="polite">Зареждаме контролния център…</main>';
  try{await api('admin/me');adminData=await api('admin/overview');renderAdmin();}
  catch(e){app.innerHTML=banner()+`<div class="guest-shell"><section class="interview" style="max-width:550px;margin:42px auto"><span class="step-label">САМО ЗА ОРГАНИЗАТОРА</span><h2>Защитен вход</h2><p class="subtitle">Гостите нямат код за вход. Организаторът влиза с разрешения Google акаунт.</p><a class="btn btn-pine" href="/api/auth/google">Вход с Google →</a><p class="error-copy">${esc(e.message)}</p></section></div>`;attach();}

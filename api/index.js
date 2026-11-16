@@ -1,9 +1,11 @@
 import { randomBytes, createHash } from 'node:crypto';
 import { neon } from '@neondatabase/serverless';
 import { SignJWT, jwtVerify, createRemoteJWKSet } from 'jose';
+import { handleV2, releaseSettings } from '../server/v2-routes.js';
 
 const adminEmails=(process.env.ADMIN_EMAILS||'').split(',').map(x=>x.trim().toLowerCase()).filter(Boolean);
 const base=(process.env.PUBLIC_BASE_URL||'').replace(/\/$/,'');
+const isPreview = process.env.VERCEL_ENV === 'preview' || process.env.VERCEL_TARGET_ENV === 'preview';
 const SECRET=process.env.SESSION_SECRET||'';
 const h=v=>createHash('sha256').update(String(v)).digest('hex');
 const random=()=>randomBytes(32).toString('base64url');
@@ -11,7 +13,13 @@ const send=(res,code,body)=>res.status(code).json(body);
 const clean=(x,max=450)=>typeof x==='string'?x.trim().slice(0,max):'';
 const cookie=(req,key)=>{const pair=(req.headers.cookie||'').split(';').map(v=>v.trim()).find(v=>v.startsWith(key+'='));try{return pair?decodeURIComponent(pair.slice(key.length+1)):'';}catch{return '';}};
 const cookieSet=(res,name,value,maxAge,httpOnly=true)=>{const existing=res.getHeader('Set-Cookie');const next=`${name}=${encodeURIComponent(value)}; Path=/; Max-Age=${maxAge}; SameSite=Lax; Secure${httpOnly?'; HttpOnly':''}`;res.setHeader('Set-Cookie',[...(existing?Array.isArray(existing)?existing:[existing]:[]),next]);};
-const sql=()=>{if(!process.env.DATABASE_URL)throw Object.assign(new Error('DATABASE_URL липсва.'),{status:503});return neon(process.env.DATABASE_URL);};
+function sql() {
+  if (!process.env.DATABASE_URL) throw Object.assign(new Error('DATABASE_URL липсва.'), { status: 503 });
+  if (!isPreview) return neon(process.env.DATABASE_URL);
+  const url = new URL(process.env.DATABASE_URL);
+  url.pathname = '/trojan_v2_fixture';
+  return neon(url.href);
+}
 const secret=()=>{if(SECRET.length<32)throw Object.assign(new Error('SESSION_SECRET не е конфигуриран.'),{status:503});return new TextEncoder().encode(SECRET);};
 const validHost=(req)=>{const origin=req.headers.origin;if(!origin)return true;try{return new URL(origin).host===req.headers.host}catch{return false}};
 const topics=['food','sides','drinks','restrictions','breakfast','desserts','extras'];
@@ -40,23 +48,47 @@ const recipes=[
 ];
 const toToken=v=>clean(v,130);
 async function guest(req){const token=toToken(req.body?.token);if(!token)return null;const db=sql();const rows=await db`SELECT household_id FROM guest_sessions WHERE token_hash=${h(token)} AND expires_at > NOW() LIMIT 1`;return rows[0]?.household_id||null;}
-async function auth(req){const token=cookie(req,'troian_admin');if(!token)return null;try{const {payload}=await jwtVerify(token,secret(),{issuer:'troian-2027',audience:'troian-admin'});return adminEmails.includes(String(payload.email).toLowerCase())?payload:null;}catch{return null;}}
+async function auth(req){const token=cookie(req,'troian_admin');if(!token)return null;try{const {payload}=await jwtVerify(token,secret(),{issuer:'troian-2027',audience:'troian-admin',algorithms:['HS256']});return adminEmails.includes(String(payload.email).toLowerCase())?payload:null;}catch{return null;}}
 async function admin(req,res){const who=await auth(req);if(!who){send(res,401,{message:'Само организаторът има достъп.'});return null;}return who;}
-async function publicHomes(db){const [homes,members]=await Promise.all([db`SELECT id,title FROM households ORDER BY id`,db`SELECT id,household_id,name,child,ordinal FROM members ORDER BY household_id,ordinal`]);return homes.map(f=>({...f,members:members.filter(m=>m.household_id===f.id)}));}
-async function familyState(db,id){const [homes,attendance,preferences,shared]=await Promise.all([publicHomes(db),db`SELECT person_id,status,days,version FROM attendance WHERE person_id IN (SELECT id FROM members WHERE household_id=${id})`,db`SELECT person_id,topic,value,version FROM preferences WHERE person_id IN (SELECT id FROM members WHERE household_id=${id})`,db`SELECT topic,value,version FROM household_shared WHERE household_id=${id}`]);const home=homes.find(h=>h.id===id);return {family:home,attendance:Object.fromEntries(attendance.map(x=>[x.person_id,x])),answers:Object.fromEntries(home.members.map(m=>[m.id,Object.fromEntries(preferences.filter(p=>p.person_id===m.id).map(p=>[p.topic,{...p.value,version:p.version}]))])),shared:Object.fromEntries(shared.map(s=>[s.topic,{...s.value,version:s.version}]))};}
+async function publicHomes(db,id=null){const [homes,members]=await Promise.all([db`SELECT id,title FROM households WHERE (${id}::text IS NULL OR id=${id}) ORDER BY id`,db`SELECT id,household_id,name,child,ordinal FROM members WHERE (${id}::text IS NULL OR household_id=${id}) ORDER BY household_id,ordinal`]);return homes.map(f=>({...f,members:members.filter(m=>m.household_id===f.id)}));}
+async function familyState(db,id){const [[home],attendance,preferences,shared]=await Promise.all([publicHomes(db,id),db`SELECT person_id,status,days,version FROM attendance WHERE person_id IN (SELECT id FROM members WHERE household_id=${id})`,db`SELECT person_id,topic,value,version FROM preferences WHERE person_id IN (SELECT id FROM members WHERE household_id=${id})`,db`SELECT topic,value,version FROM household_shared WHERE household_id=${id}`]);return {family:home,attendance:Object.fromEntries(attendance.map(x=>[x.person_id,x])),answers:Object.fromEntries(home.members.map(m=>[m.id,Object.fromEntries(preferences.filter(p=>p.person_id===m.id).map(p=>[p.topic,{...p.value,version:p.version}]))])),shared:Object.fromEntries(shared.map(s=>[s.topic,{...s.value,version:s.version}]))};}
 async function trends(db,exclude){const rows=await db`SELECT p.person_id,p.topic,p.value FROM preferences p JOIN attendance a ON a.person_id=p.person_id JOIN members m ON m.id=p.person_id WHERE m.household_id<>${exclude} AND a.status='yes' AND p.topic IN ('food','sides','breakfast','desserts')`;const counts=new Map();for(const row of rows){for(const name of [...new Set(Array.isArray(row.value?.selected)?row.value.selected:[])]){const key=row.topic+'|'+name;if(!counts.has(key))counts.set(key,new Set());counts.get(key).add(row.person_id);}}return [...counts].filter(([k,set])=>set.size>=2).map(([k,set])=>({topic:k.split('|')[0],name:k.split('|')[1],votes:set.size})).sort((a,b)=>b.votes-a.votes).slice(0,12);}
 async function shopping(db){const items=await db`SELECT slot_id,recipe_id,portions FROM menu_items`;const map=new Map();for(const item of items){const recipe=recipes.find(x=>x.id===item.recipe_id);if(!recipe)continue;for(const ig of recipe.ingredients){const key=ig.name+'|'+ig.unit;if(!map.has(key))map.set(key,{id:key,name:ig.name,category:ig.category,unit:ig.unit,qty:0,usedIn:[]});const obj=map.get(key);obj.qty+=ig.amount*item.portions;obj.usedIn.push(slots.find(s=>s.id===item.slot_id)?.name+' · '+recipe.name);}}const bought=await db`SELECT * FROM purchases`;return [...map.values()].map(x=>{const p=bought.find(v=>v.item_id===x.id);const big=(x.unit==='g'||x.unit==='ml')&&x.qty>=1000;return {...x,quantity:big?Number((x.qty/1000).toFixed(2)):x.unit==='бр'?Math.ceil(x.qty):Number(x.qty.toFixed(1)),unit:big?(x.unit==='g'?'кг':'л'):x.unit,bought:p?.bought||false,assignedTo:p?.assigned_to||''};}).sort((a,b)=>a.category.localeCompare(b.category,'bg')||a.name.localeCompare(b.name,'bg'));}
 function route(req){const p=req.query?.path;if(Array.isArray(p))return p.join('/');if(typeof p==='string')return p;const m=(req.url||'').match(/^\/api\/([^?]+)/);return m?.[1]||'';}
+function eventBase(req) {
+  if (!isPreview) return base;
+  const host = String(req.headers.host || '');
+  return /^trojan-[a-z0-9-]+\.vercel\.app$/.test(host) ? 'https://' + host : '';
+}
+
 export default async function handler(req,res){
  res.setHeader('Cache-Control','no-store');
  res.setHeader('Content-Type','application/json; charset=utf-8');
  const path=route(req).replace(/^\/+|\/+$/g,'');const body=req.body&&typeof req.body==='object'?req.body:{};
  if(req.method==='POST'&&!validHost(req))return send(res,403,{message:'Невалиден origin.'});
  try{
+  if (isPreview) {
+   const preview = process.env.DATABASE_URL && await releaseSettings(sql()).catch(() => null);
+   if (!preview?.fixture_only) {
+    return send(res, 503, { message: 'Preview очаква отделна база с примерни данни.' });
+   }
+  }
+  if (path.startsWith('v2/')) {
+   if (req.method === 'POST' && typeof req.headers['content-type'] === 'string'
+       && req.headers['content-type'].split(';')[0].trim().toLowerCase() !== 'application/json') {
+    return send(res, 415, { message: 'Очакват се JSON данни.' });
+   }
+   return await handleV2(req, res, path.slice(3), sql(), {
+    json: send, cookie, setCookie: cookieSet, hash: h, random, auth,
+    legacyState: familyState, legacyRecipes: recipes, baseUrl: eventBase
+   });
+  }
   if(req.method==='GET'&&path==='health'){
-   if(!process.env.DATABASE_URL)return send(res,503,{ok:false,databaseConfigured:false,databaseReachable:false,version:'vercel-port-v1'});
-   try{await sql()`SELECT 1 AS check`;return send(res,200,{ok:true,databaseConfigured:true,databaseReachable:true,version:'vercel-port-v1'});}
-   catch{return send(res,503,{ok:false,databaseConfigured:true,databaseReachable:false,version:'vercel-port-v1'});}
+   const commit = process.env.VERCEL_GIT_COMMIT_SHA;
+   const release = { version: 'trojan-2027-v2', ...(/^[a-f0-9]{40}$/.test(commit) && { commit }) };
+   if(!process.env.DATABASE_URL)return send(res,503,{ok:false,databaseConfigured:false,databaseReachable:false,...release});
+   try{await sql()`SELECT 1 AS check`;return send(res,200,{ok:true,databaseConfigured:true,databaseReachable:true,...release});}
+   catch{return send(res,503,{ok:false,databaseConfigured:true,databaseReachable:false,...release});}
   }
   if(req.method==='GET'&&path==='auth/google'){
    if(!process.env.GOOGLE_CLIENT_ID||!process.env.GOOGLE_CLIENT_SECRET||!base)return send(res,503,{message:'Google OAuth липсва.'});
@@ -86,7 +118,18 @@ export default async function handler(req,res){
   if(!routes[path])return send(res,404,{message:'Няма такъв маршрут.'});
   if(routes[path]!==req.method)return send(res,405,{message:'Непозволен метод.'});
   const db=sql();
+  const newSurvey = await releaseSettings(db);
+  if (newSurvey?.enabled && (path.startsWith('guest/') || path.startsWith('admin/'))) {
+   return send(res, 410, { message: 'Версията е обновена. Отвори страницата отново.' });
+  }
   if(req.method==='GET'&&path==='public'){
+   if (newSurvey?.enabled) {
+    const [counts] = await db`SELECT
+      (SELECT count(*)::integer FROM households WHERE archived_at IS NULL) AS households,
+      (SELECT count(*)::integer FROM members m JOIN households h ON h.id = m.household_id
+       WHERE m.archived_at IS NULL AND h.archived_at IS NULL) AS participants`;
+    return send(res, 200, { overview: counts, event: { dates: days, nights: 2 } });
+   }
    const homes=await publicHomes(db);const [info]=await db`SELECT value FROM event_settings WHERE id=1`;
    return send(res,200,{overview:{households:homes.length,participants:homes.reduce((sum,home)=>sum+home.members.length,0)},event:{dates:days,nights:2}});
   }
@@ -182,5 +225,5 @@ export default async function handler(req,res){
 
   }
   return send(res,404,{message:'Няма такъв маршрут.'});
- }catch(e){console.error('api request failed',{path,name:e?.name||'Error'});return send(res,e?.status||500,{message:e?.status?e.message:'Вътрешна грешка. Провери настройките на сървъра.'});}
+ }catch(e){if(!e?.status||e.status>=500)console.error('api request failed',{path,name:e?.name||'Error'});return send(res,e?.status||500,{message:e?.status?e.message:'Вътрешна грешка. Провери настройките на сървъра.'});}
 }
