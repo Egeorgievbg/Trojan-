@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import sharp from 'sharp';
 import { isolatedEvent } from './fixture.mjs';
-import { RECIPES } from '../public/event-catalog.js';
+import { MEALS, RECIPES } from '../public/event-catalog.js';
 
 test('Trojan V2 invitations, survey and organizer against isolated PostgreSQL', async t => {
   const { pg, handler, organizer, invitation } = await isolatedEvent();
@@ -124,7 +124,7 @@ test('Trojan V2 invitations, survey and organizer against isolated PostgreSQL', 
     assert.equal((await confirm()).status, 200);
     assert.equal((await confirm()).status, 200);
     const plan = (await request('v2/admin/overview', undefined, admin)).data;
-    assert.equal(plan.meals.length, 7);
+    assert.equal(plan.meals.length, MEALS.length);
     const dinner = plan.meals.find(item => item.id === '31-dinner');
     assert.deepEqual([dinner.confirmed, dinner.children, dinner.possible], [2, 1, 1]);
     assert.deepEqual(dinner.votes.kyufte, { confirmed: 1, possible: 0, favourite: 1 });
