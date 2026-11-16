@@ -7,7 +7,7 @@ export function createGuestChat(app, alive) {
   const view = () => `<aside class="t27-messenger" aria-label="Помощ и съобщения">
     <button type="button" class="t27-chat-toggle" data-chat-toggle aria-expanded="${open}">
       <span class="t27-chat-toggle-icon" aria-hidden="true">✦</span> <span>AI &amp; чат</span></button>
-    ${open ? `<section class="t27-chat-window">
+    ${open ? `<section class="t27-chat-window" role="dialog" aria-modal="false" aria-label="Помощ и чат за Троян 2027">
       <div class="t27-chat-head"><div><small class="t27-chat-eyebrow">ТРОЯН 2027 · КОНСИЕРЖ</small><strong>Тук сме, за да помогнем</strong></div><button type="button" data-chat-toggle aria-label="Затвори чата">✕</button></div>
       <div class="t27-chat-modes" role="group" aria-label="Тип разговор">
         <button type="button" data-chat-mode="human" aria-pressed="${mode==='human'}">Организатори</button>
@@ -35,9 +35,17 @@ export function createGuestChat(app, alive) {
   </aside>`;
   function mount() {
     if (!alive() || !app.querySelector('.t27-guest')) return;
+    const currentList=app.querySelector('.t27-messenger .t27-chat-messages');
+    const previousScroll=currentList?.scrollTop ?? 0;
+    const wasAtBottom=!currentList || currentList.scrollHeight-currentList.clientHeight-previousScroll < 90;
     app.querySelector('.t27-messenger')?.remove();
     const root=document.createElement('div'); root.innerHTML=view();
     const node=root.firstElementChild; app.append(node);
+    const list=node.querySelector('.t27-chat-messages');
+    if(list) list.scrollTop=wasAtBottom ? list.scrollHeight : previousScroll;
+    node.addEventListener('keydown', event => {
+      if(event.key === 'Escape' && open) { open=false; if(timer)clearTimeout(timer); mount(); }
+    });
     node.querySelectorAll('[data-chat-toggle]').forEach(button => button.addEventListener('click', () => {
       open=!open; if(open && mode==='human') void refresh(); else if(timer)clearTimeout(timer);
       mount();
