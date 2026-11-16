@@ -11,7 +11,7 @@ export async function answerEventQuestion(db, householdId, raw) {
   if (rate.total >= 25) throw new RequestError(429,'Достигнат е лимитът от 25 AI въпроса на час за домакинството.');
   await db`INSERT INTO t27_ai_requests(household_id) VALUES(${householdId})`;
   const [family, menu, event, contributors] = await Promise.all([
-    db`SELECT h.title, s.submitted, s.submitted_at FROM households h
+    db`SELECT s.submitted, s.submitted_at FROM households h
       LEFT JOIN t27_surveys s ON s.household_id=h.id WHERE h.id=${householdId} AND h.archived_at IS NULL`,
     db`SELECT slot_id,recipe_id,portions FROM menu_items WHERE portions>0 ORDER BY slot_id,recipe_id`,
     db`SELECT value FROM event_settings WHERE id=1`,
@@ -21,9 +21,9 @@ export async function answerEventQuestion(db, householdId, raw) {
   ]);
   if (!family.length) throw new RequestError(401,'Личната покана вече не е активна.');
   const own=family[0];
-  const members=await db`SELECT id,name,child FROM members WHERE household_id=${householdId} AND archived_at IS NULL ORDER BY ordinal`;
+  const members=await db`SELECT id,child FROM members WHERE household_id=${householdId} AND archived_at IS NULL ORDER BY ordinal`;
   const attendance=object(own.submitted?.attendance);
-  const myParticipants=members.map(m=>({name:m.name,child:m.child,status:attendance[m.id]?.status||'непотвърден',
+  const myParticipants=members.map((m,index)=>({participant:`Участник ${index+1}`,child:m.child,status:attendance[m.id]?.status||'непотвърден',
     nights:array(attendance[m.id]?.nights), meals:array(attendance[m.id]?.meals)}));
   const shared=contributors.flatMap(row => array(row.items).map(item => ({
     household:row.title,what:clean(item.label,100) || RECIPES.find(r=>r.id===item.recipeId)?.name || 'Неуточнен продукт',
@@ -40,7 +40,7 @@ export async function answerEventQuestion(db, householdId, raw) {
     event:{dates:array(config.dates).length?config.dates:DAYS.map(d=>d.id),
       nights:config.nights ?? 3, address:config.address||'Не е уточнен',
       arrival:config.arrival||'',departure:config.departure||'',mealTimes:object(config.mealTimes)},
-    myHousehold:{title:own.title,hasConfirmedSurvey:!!own.submitted_at,participants:myParticipants},
+    myHousehold:{hasConfirmedSurvey:!!own.submitted_at,participants:myParticipants},
     availableMeals:MEALS.map(x=>({id:x.id,title:x.title,date:x.day})),plannedMeals,sharedContributions:shared
   };
   const model=/^[a-zA-Z0-9._-]{1,64}$/.test(process.env.OPENAI_CHAT_MODEL||'')
