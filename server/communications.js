@@ -36,10 +36,10 @@ async function storeSubscription(db, role, householdId, sub, cats) {
 
 async function removeSubscription(db, role, householdId, endpoint) {
   if (!validPushEndpoint(endpoint)) error(400,'Невалиден адрес на абонамент.');
-  await db`DELETE FROM t27_push_subscriptions
+  const removed=await db`DELETE FROM t27_push_subscriptions
     WHERE endpoint_hash=${endpointHash(endpoint)} AND recipient_role=${role}
-      AND (${role}='admin' OR household_id=${householdId})`;
-  return {ok:true};
+      AND (${role}='admin' OR household_id=${householdId}) RETURNING endpoint_hash`;
+  return {ok:true,removed:removed.length>0};
 }
 
 async function messageHistory(db, householdId) {
