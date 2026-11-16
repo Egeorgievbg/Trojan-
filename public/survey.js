@@ -1,5 +1,5 @@
 import {
-  ACTIVITIES, ALLERGENS, CONTRIBUTION_UNITS, DAYS, DIETS, MEALS, RESTRICTION_TYPES,
+  ACTIVITIES, ALLERGENS, CONTRIBUTION_UNITS, DAYS, DIETS, MEALS, NIGHTS, RESTRICTION_TYPES,
   STATUS_LABELS, TASKS, appliesToMeal
 } from './event-catalog.js';
 import { action, banner, dishImage, escapeHtml as e, partyApi, partyInstance, stamp } from './party-ui.js';
@@ -47,6 +47,7 @@ function viewModel(source) {
   draft.attendance ||= {};
   draft.people ||= {};
   draft.shared = { traditions: [], tasks: [], contributions: [], note: '', ...draft.shared };
+  for (const item of Object.values(draft.attendance)) item.nights ||= [];
   return draft;
 }
 
@@ -70,7 +71,7 @@ export function mountGuest({ app, link = '', onHome }) {
   const isSubmitted = () => model.status.revision > 0 && model.status.revision === model.status.submittedRevision;
 
   function attendanceOf(id) {
-    return draft.attendance[id] ??= { status: '', meals: [], arrival: '', departure: '' };
+    return draft.attendance[id] ??= { status: '', meals: [], nights: [], arrival: '', departure: '' };
   }
 
   function answerFor(id) {
@@ -121,6 +122,10 @@ export function mountGuest({ app, link = '', onHome }) {
         ${entry.status && entry.status !== 'no' ? `<div class="t27-dates">
           ${entry.legacyDays?.length ? banner('Има записани дни от предишната анкета. Потвърди конкретните хранения.') : ''}
           ${dates}
+          <div class="t27-overnight"><strong>Нощувки</strong><p class="t27-help">Избери вечерите, в които ${e(person.name)} ще остане да спи.</p>
+            <div class="t27-chips">${NIGHTS.map(night => action('night:' + person.id + ':' + night.id,
+              'Нощувка ' + night.label, 't27-chip', `aria-pressed="${(entry.nights ?? []).includes(night.id)}"`)).join('')}</div>
+          </div>
           <details class="t27-fold"><summary>Пристигане и тръгване (по желание)</summary>
             <div class="t27-fields t27-fields--two">
               ${labelledInput('Кога пристига?', 'presence:' + person.id + ':arrival', entry.arrival)}
@@ -229,9 +234,11 @@ export function mountGuest({ app, link = '', onHome }) {
       const restriction = answer.restriction;
       const foods = listed(Object.values(answer.selected).flat(), labels);
       const presence = MEALS.filter(meal => participation.meals.includes(meal.id)).map(meal => DAYS.find(day => day.id === meal.day).label + ' · ' + meal.title).join(', ');
+      const nights = NIGHTS.filter(night => (participation.nights ?? []).includes(night.id)).map(night => night.label).join(', ');
       return `<article class="t27-card t27-review-card">
         <h3>${e(person.name)} <span class="t27-pill">${e(STATUS_LABELS[participation.status] || 'Без отговор')}</span></h3>
         <p>${e(presence || (participation.status === 'maybe' ? 'Храненията са за уточнение' : ''))}</p>
+        ${participation.status !== 'no' ? `<p><strong>Нощувки:</strong> ${e(nights || 'Не са уточнени')}</p>` : ''}
         ${participation.status !== 'no' ? `<dl class="t27-review-lines">
           <dt>Ограничения</dt><dd>${e(({ none: 'Няма известни', unknown: 'За уточнение',
             has: [RESTRICTION_TYPES[restriction.kind], listed(restriction.categories, ALLERGENS), restriction.details,
@@ -271,7 +278,7 @@ export function mountGuest({ app, link = '', onHome }) {
     } else if (phase === 'welcome' || phase === 'done') {
       const done = phase === 'done';
       app.innerHTML = `<main class="t27 t27-guest"><div class="t27-surface t27-entry ${focus ? 't27-motion-in' : ''}">
-        <span class="t27-brand">${icon(done ? 'check' : 'cabin')} ТРОЯН · 31.12–02.01</span>
+        <span class="t27-brand">${icon(done ? 'check' : 'cabin')} ТРОЯН · 31.12–03.01</span>
         <h1 tabindex="-1">${done ? 'Анкетата е изпратена' : e(model.family.title)}</h1>
         ${done ? `<p>Получихме отговорите за ${e(model.family.title)}. Потвърдени на ${e(stamp(model.status.submittedAt))}.</p>`
           : '<p>Една покана за вашето семейство. Отбележете присъствието и попълнете поотделно за всеки.</p>'}
@@ -351,7 +358,7 @@ export function mountGuest({ app, link = '', onHome }) {
       if (!model.family.members.length) throw new Error('Организаторът още добавя участниците в това домакинство.');
       draft = viewModel(model.draft);
       phase = isSubmitted() ? 'done' : 'welcome';
-      history.replaceState(null, '', '/#survey');
+      history.replaceState(null, '', isSubmitted() ? '/thank-you' : '/#survey');
       render(true);
     } catch (problem) {
       if (!instance.alive()) return;
@@ -425,7 +432,7 @@ export function mountGuest({ app, link = '', onHome }) {
       }
       busy = false;
       if (exit) { onHome(); return; }
-      if (shouldConfirm) { phase = 'done'; render(true); }
+      if (shouldConfirm) { phase = 'done'; history.replaceState(null, '', '/thank-you'); render(true); }
       else selectStage(nextStep, personId);
     } catch (problem) {
       if (!instance.alive()) return;
@@ -457,12 +464,15 @@ export function mountGuest({ app, link = '', onHome }) {
     if (actionName === 'presence') {
       const entry = attendanceOf(a);
       entry.status = b;
-      if (b === 'no') entry.meals = [];
+      if (b === 'no') { entry.meals = []; entry.nights = []; }
     } else if (actionName === 'day') {
       const entry = attendanceOf(a);
       const ids = MEALS.filter(meal => meal.day === b).map(meal => meal.id);
       entry.meals = ids.every(id => entry.meals.includes(id))
         ? entry.meals.filter(id => !ids.includes(id)) : [...new Set([...entry.meals, ...ids])];
+    } else if (actionName === 'night') {
+      const entry = attendanceOf(a);
+      entry.nights = toggle(entry.nights ?? [], b, NIGHTS.length) ?? entry.nights ?? [];
     } else if (actionName === 'meal') {
       const entry = attendanceOf(a);
       entry.meals = toggle(entry.meals, b, MEALS.length) ?? entry.meals;
