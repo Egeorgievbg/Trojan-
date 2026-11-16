@@ -84,6 +84,14 @@ async function notify(db, targets, payload, actor, category) {
     expired:delivered.filter(x=>x==='expired').length, subscribers:targets.length };
 }
 
+export async function notifyOrganizerOfSubmission(db, title) {
+  if (!process.env.VAPID_PRIVATE_KEY || !process.env.VAPID_PUBLIC_KEY || !process.env.VAPID_SUBJECT) return;
+  const targets=await pushRecipients(db,'admin',null,'announcements');
+  if(!targets.length) return;
+  await notify(db,targets,{title:'Троян 2027 · Нова анкета',
+    body:'Потвърдена е анкета от '+clean(title,80)+'.',url:'/#admin',category:'announcements'},
+    null,'announcements');
+}
 export async function handleCommunications(req, res, path, db, { role, householdId=null, actor='', json }) {
   const body = req.body && typeof req.body === 'object' && !Array.isArray(req.body) ? req.body : {};
   const get = req.method === 'GET';
@@ -122,7 +130,19 @@ export async function handleCommunications(req, res, path, db, { role, household
     if(!validHome(id)) error(400,'Избери домакинство.');
     const [exists] = await db`SELECT id FROM households WHERE id=${id} AND archived_at IS NULL`;
     if(!exists) error(404,'Няма такова домакинство.');
-    return json(res,200,await sendMessage(db,id,role,body.body));
+    const saved=await sendMessage(db,id,role,body.body);
+    if (process.env.VAPID_PRIVATE_KEY && process.env.VAPID_PUBLIC_KEY && process.env.VAPID_SUBJECT) {
+      try {
+        const recipientRole=guest?'admin':'guest';
+        const targets=await pushRecipients(db,recipientRole,guest?null:id,'messages');
+        if(targets.length) await notify(db,targets,{
+          title:'Троян 2027 · Ново съобщение',
+          body:guest?'Получено е съобщение от участник.':'Имате ново съобщение от организаторите.',
+          url:guest?'/#admin':'/#survey',category:'messages'
+        },guest?null:actor,'messages');
+      } catch { /* Push failure must never roll back a recorded private message. */ }
+    }
+    return json(res,200,saved);
   }
   if(route === 'notifications') {
     const logs=await db`SELECT household_id,title,category,status,error_code,created_at
