@@ -5,6 +5,8 @@ import {
 import { action, banner, dishImage, escapeHtml as e, partyApi, partyInstance, stamp } from './party-ui.js';
 import { icon, loadingMark } from './interface.js';
 import { thankYouSection } from './thanks.js';
+import { createGuestChat } from './guest-chat.js';
+import { createPushPrompt } from './notifications.js';
 
 const stages = [
   { label: 'Присъствие', title: 'Кой ще празнува с нас?', icon: 'calendar' },
@@ -54,6 +56,8 @@ function viewModel(source) {
 
 export function mountGuest({ app, link = '', onHome }) {
   const instance = partyInstance(app);
+  const chat = createGuestChat(app, instance.alive);
+  const push = createPushPrompt(app, 'guest', instance.alive);
   let model;
   let draft;
   let phase = 'loading';
@@ -340,6 +344,10 @@ export function mountGuest({ app, link = '', onHome }) {
       [...app.querySelectorAll('[data-action27]')].find(node => node.dataset.action27 === focused)?.focus({ preventScroll: true });
       window.scrollTo({ top: scroll, behavior: 'instant' });
     }
+    if (model && phase !== 'loading' && phase !== 'error') {
+      chat.mount();
+      if (phase === 'welcome' || phase === 'done') void push.show();
+    }
   }
 
   async function start() {
@@ -518,6 +526,7 @@ export function mountGuest({ app, link = '', onHome }) {
     const [name, a, b] = button.dataset.action27.split(':');
     if (name === 'home') return onHome();
     if (name === 'retry') return start();
+    if (name === 'push-settings') return void push.show(true);
     if (name === 'start') { returnToReview = false; return selectStage(draft.progress ?? 0, draft.progressPerson); }
     if (name === 'leave') {
       busy = true;
