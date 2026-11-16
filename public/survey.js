@@ -4,6 +4,7 @@ import {
 } from './event-catalog.js';
 import { action, banner, dishImage, escapeHtml as e, partyApi, partyInstance, stamp } from './party-ui.js';
 import { icon, loadingMark } from './interface.js';
+import { thankYouSection } from './thanks.js';
 
 const stages = [
   { label: 'Присъствие', title: 'Кой ще празнува с нас?', icon: 'calendar' },
@@ -290,6 +291,7 @@ export function mountGuest({ app, link = '', onHome }) {
           ${action('leave', 'Изход от семейния профил', 't27-text-btn', busy ? 'disabled' : '')}
         </div>
         ${!done && model.status.revision ? `<p class="t27-resume">Запазен етап · ${e(stages[draft.progress ?? 0].label)}</p>` : ''}
+        ${done ? thankYouSection(model, review()) : ''}
         ${eventDetails(model.event)}
       </div></main>`;
     } else {
