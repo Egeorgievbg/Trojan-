@@ -2,22 +2,28 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { readFile } from 'node:fs/promises';
+import { homeCounts, homePage } from '../public/home.js';
+import { icon, loadingMark } from '../public/interface.js';
 
-const source = (await readFile(new URL('../public/app.js', import.meta.url), 'utf8')).split('init().catch')[0];
+const source = (await readFile(new URL('../public/app.js', import.meta.url), 'utf8'))
+  .split('Promise.resolve().then(init)')[0].replace(/^import .*;$/gm, '');
 function browser() {
   const state = { modal: null, note: null, choice: null };
-  const app = { innerHTML: '', querySelectorAll(selector) { return selector === '[data-choice]' && state.choice ? [state.choice] : []; } };
+  const app = { innerHTML: '', querySelector() { return null; },
+    querySelectorAll(selector) { return selector === '[data-choice]' && state.choice ? [state.choice] : []; } };
   const document = {
     getElementById() { return app; },
     querySelector(selector) { return selector === '#lightbox' ? state.modal : selector === '#note' ? state.note : null; },
     body: { appendChild(modal) { state.modal = modal; } },
     createElement() {
       const previous = { dataset: { dir: '-1' } }, next = { dataset: { dir: '1' } }, close = {};
-      return { innerHTML: '', setAttribute() {}, addEventListener() {}, remove() { state.modal = null; },
+      return { innerHTML: '', setAttribute() {}, showModal() { this.open = true; }, addEventListener() {}, remove() { state.modal = null; },
         querySelector() { return close; }, querySelectorAll() { return [previous, next]; }, previous, next };
     }
   };
-  const context = vm.createContext({ document, window: { addEventListener() {} }, console, URL, Date, setTimeout, clearTimeout });
+  const fetch = async () => ({ ok: true, json: async () => ({ overview: { households: 2, participants: 3 } }) });
+  const context = vm.createContext({ document, window: { addEventListener() {} }, console, URL, Date, setTimeout, clearTimeout,
+    homeCounts, homePage, icon, loadingMark, fetch });
   vm.runInContext(source, context);
   return { state, app, run: code => vm.runInContext(code, context) };
 }
@@ -56,10 +62,10 @@ test('validation errors do not show a duplicate generic save failure', () => {
   assert.equal(run('saveStateLabel()'), '');
 });
 
-test('public home uses generic household cards and the review is explicit', () => {
+test('public home shows anonymous totals and the review is explicit', () => {
   const { app, run } = browser();
   run('publicOverview={households:2,participants:3}; renderHome()');
-  assert.match(app.innerHTML, /Домакинство 01/);
+  assert.match(app.innerHTML, /2 домакинства · 3 поканени/);
   assert.doesNotMatch(app.innerHTML, /Евгени|Илияна|Ивелин|Веско|Деси|Наката/);
   run(`guest={family:{id:'family-test',title:'Тестово домакинство',members:[{id:'adult',name:'Възрастен',child:false},{id:'child',name:'Дете',child:true}]},attendance:{adult:{status:'yes',days:[DATES[0]]},child:{status:'yes',days:[DATES[0]]}},answers:{},shared:{},event:{}}; guestStep=guestSteps().length-1; renderGuest()`);
   assert.match(app.innerHTML, /Потвърждавам отговорите/);

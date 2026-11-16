@@ -3,13 +3,14 @@ import {
   STATUS_LABELS, TASKS, appliesToMeal
 } from './event-catalog.js';
 import { action, banner, dishImage, escapeHtml as e, partyApi, partyInstance, stamp } from './party-ui.js';
+import { icon, loadingMark } from './interface.js';
 
 const stages = [
-  { label: 'Присъствие', title: 'Кой ще празнува с нас?' },
-  { label: 'Ограничения', title: 'Хранителни ограничения' },
-  { label: 'Меню', title: 'Меню и напитки' },
-  { label: 'Общ план', title: 'Какво ще подготвим заедно?' },
-  { label: 'Преглед', title: 'Готови ли сме?' }
+  { label: 'Присъствие', title: 'Кой ще празнува с нас?', icon: 'calendar' },
+  { label: 'Ограничения', title: 'Хранителни ограничения', icon: 'shield' },
+  { label: 'Меню', title: 'Меню и напитки', icon: 'table' },
+  { label: 'Общ план', title: 'Какво ще подготвим заедно?', icon: 'tasks' },
+  { label: 'Преглед', title: 'Готови ли сме?', icon: 'form' }
 ];
 
 function toggle(values, id, limit) {
@@ -92,7 +93,7 @@ export function mountGuest({ app, link = '', onHome }) {
     return `<button type="button" class="t27-choice ${recipe.group === 'drink' ? 't27-choice--text' : ''}"
       aria-pressed="${active}" data-action27="${e(actionName + ':' + recipe.id)}">
       ${dishImage(recipe, model.dishPhotos.includes(recipe.id))}
-      <span class="t27-choice-label">${e(recipe.name)}<span class="t27-tick" aria-hidden="true">${active ? '✓' : ''}</span></span>
+      <span class="t27-choice-label">${e(recipe.name)}<span class="t27-tick" aria-hidden="true">${active ? icon('check') : ''}</span></span>
     </button>`;
   }
 
@@ -261,15 +262,16 @@ export function mountGuest({ app, link = '', onHome }) {
     const focused = document.activeElement?.dataset?.action27;
     if (phase === 'loading' || phase === 'error') {
       app.innerHTML = `<main class="t27 t27-guest"><div class="t27-surface t27-entry">
-        <span class="t27-brand">ТРОЯН · 2027</span>
+        <span class="t27-brand">${icon('cabin')} ТРОЯН · 2027</span>
+        ${phase === 'loading' ? `<div class="t27-load-copy">${loadingMark()}</div>` : ''}
         <h1 tabindex="-1">${phase === 'loading' ? 'Зареждаме поканата…' : 'Семейна покана'}</h1>
         ${banner(error, 'error')}${phase === 'error' ? `<p>Отвори личния линк от Viber. При проблем отвори същия линк в Safari или Chrome.</p>
           <div class="t27-chips">${action('retry', 'Опитай отново')}${action('home', 'Към началото', 't27-btn t27-btn--line')}</div>` : ''}
       </div></main>`;
     } else if (phase === 'welcome' || phase === 'done') {
       const done = phase === 'done';
-      app.innerHTML = `<main class="t27 t27-guest"><div class="t27-surface t27-entry">
-        <span class="t27-brand">ТРОЯН · 31.12–02.01</span>
+      app.innerHTML = `<main class="t27 t27-guest"><div class="t27-surface t27-entry ${focus ? 't27-motion-in' : ''}">
+        <span class="t27-brand">${icon(done ? 'check' : 'cabin')} ТРОЯН · 31.12–02.01</span>
         <h1 tabindex="-1">${done ? 'Анкетата е изпратена' : e(model.family.title)}</h1>
         ${done ? `<p>Получихме отговорите за ${e(model.family.title)}. Потвърдени на ${e(stamp(model.status.submittedAt))}.</p>`
           : '<p>Една покана за вашето семейство. Отбележете присъствието и попълнете поотделно за всеки.</p>'}
@@ -277,7 +279,7 @@ export function mountGuest({ app, link = '', onHome }) {
           : `<div class="t27-chips">${model.family.members.map(person => `<span class="t27-pill">${e(person.name)}</span>`).join('')}</div>`}
         ${banner(error, 'error')}
         <div class="t27-chips">
-          ${action(done ? 'edit:4' : 'start', done ? 'Прегледай и редактирай' : model.status.revision ? 'Продължи анкетата' : 'Започни анкетата', 't27-btn t27-btn--primary')}
+          ${action(done ? 'edit:4' : 'start', done ? 'Прегледай и редактирай' : model.status.revision ? 'Продължи анкетата' : 'Започни анкетата', 't27-btn t27-btn--primary', '', done ? 'edit' : 'next')}
           ${action('leave', 'Изход от семейния профил', 't27-text-btn', busy ? 'disabled' : '')}
         </div>
         ${!done && model.status.revision ? `<p class="t27-resume">Запазен етап · ${e(stages[draft.progress ?? 0].label)}</p>` : ''}
@@ -290,16 +292,17 @@ export function mountGuest({ app, link = '', onHome }) {
         : step === 2 && person ? preferences(person) : step === 3 ? familyPlan() : review();
       app.innerHTML = `<main class="t27 t27-guest">
         <header class="t27-top"><div class="t27-top-inner">
-          <div class="t27-split"><span class="t27-brand">ТРОЯН · 2027</span>${action('save-exit', 'Запази и излез', 't27-text-btn', busy ? 'disabled' : '')}</div>
-          <div class="t27-progress" aria-hidden="true">${stages.map((_, index) => `<span class="${index <= step ? 'is-filled' : ''}"></span>`).join('')}</div>
-          <div class="t27-person-context"><div>
+          <div class="t27-split"><span class="t27-brand">${icon('cabin')} ТРОЯН · 2027</span>${action('save-exit', 'Запази и излез', 't27-text-btn', busy ? 'disabled' : '')}</div>
+          <div class="t27-progress" role="progressbar" aria-label="Напредък" aria-valuemin="1" aria-valuemax="${stages.length}" aria-valuenow="${step + 1}">
+            ${stages.map((_, index) => `<span class="${index <= step ? 'is-filled' : ''}"></span>`).join('')}</div>
+          <div class="t27-person-context"><div class="t27-person-name"><span class="t27-person-icon">${icon(person ? 'person' : 'people')}</span><div>
             <small>${person ? 'Попълваш за' : 'За цялото семейство'}</small>
-            <strong>${e(person?.name ?? model.family.title)}</strong></div>
+            <strong>${e(person?.name ?? model.family.title)}</strong></div></div>
             ${person ? `<span class="t27-pill">${person.child ? 'Дете' : 'Възрастен'} · ${attendees().indexOf(person) + 1}/${attendees().length}</span>` : ''}
           </div>
         </div></header>
-        <section class="t27-step">
-          <p class="t27-kicker">Етап ${step + 1} от 5 · ${e(stage.label)}</p>
+        <section class="t27-step ${focus ? 't27-motion-in' : ''}">
+          <p class="t27-kicker"><span class="t27-stage-icon">${icon(stage.icon)}</span>Етап ${step + 1} от 5 · ${e(stage.label)}</p>
           <h1 tabindex="-1">${e(stage.title)}</h1>
           ${step === 0 ? '<p>Отбележи присъствието и храненията по човек.</p>' : ''}
           ${banner(error, 'error')}
@@ -314,9 +317,9 @@ export function mountGuest({ app, link = '', onHome }) {
         <footer class="t27-bottom">
           <p role="status" class="t27-save">${e(busy ? 'Запазва се…' : dirty ? 'Има незапазени промени' : message || (isSubmitted() ? 'Има изпратена версия' : model.status.revision ? 'Черновата е запазена' : ''))}</p>
           <div class="t27-bottom-actions">
-            ${action('back', '‹ Назад', 't27-btn t27-btn--line', step === 0 || busy ? 'disabled' : '')}
+            ${action('back', 'Назад', 't27-btn t27-btn--line', step === 0 || busy ? 'disabled' : '', 'back')}
             ${action('next', step === 4 ? (isSubmitted() && !dirty ? 'Към потвърждението' : 'Изпрати анкетата')
-              : 'Запази и продължи', 't27-btn t27-btn--primary', busy ? 'disabled' : '')}
+              : 'Запази и продължи', 't27-btn t27-btn--primary', busy ? 'disabled' : '', step === 4 ? 'check' : 'next')}
           </div>
         </footer>
       </main>`;

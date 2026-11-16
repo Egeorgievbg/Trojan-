@@ -1,3 +1,6 @@
+import { homeCounts, homePage } from './home.js';
+import { icon, loadingMark } from './interface.js';
+
 const app=document.getElementById('app');
 const HOUSEHOLDS=[];
 const PHOTO=[['aerial.jpg','Общ изглед към имота'],['veranda.jpg','Уютната веранда'],['garden-wide.jpg','Дворът'],['garden-terrace.jpg','Къщата и терасата'],['garden-loungers.jpg','Кът за почивка'],['bedroom.jpg','Спалнята']];
@@ -18,7 +21,7 @@ const CHOICES={
 };
 const CHILD_ALCOHOL=new Set(['Бира','Вино','Ракия','Уиски']);
 const Q={food:n=>`Какво би хапнал/а ${n}?`,sides:n=>`Какви салати и мезета харесва ${n}?`,drinks:n=>`Какво предпочита да пие ${n}?`,restrictions:n=>`Има ли алергии или ограничения за ${n}?`,breakfast:n=>`Какво обича за закуска ${n}?`,desserts:n=>`Какъв десерт ще хареса ${n}?`,extras:n=>`Какво още да подготвим за ${n}?`};
-let families=[],publicOverview={households:4,participants:14},eventInfo={},guest=null,guestToken='',guestStep=0,guestDraft=null,adminData=null,adminTab='overview',message='',error='',coach='',photoIndex=null,saveState='idle';
+let families=[],publicOverview=null,eventInfo={},guest=null,guestToken='',guestStep=0,guestDraft=null,adminData=null,adminTab='overview',message='',error='',coach='',photoIndex=null,saveState='idle';
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const round=v=>Number.isFinite(v)?Number(v.toFixed(2)):0;
 const limit=(a,n=500)=>String(a||'').slice(0,n);
@@ -63,8 +66,52 @@ async function legacyNext(skip=false){const step=legacyCurrent();if(!step||step.
 async function legacyLoadGuest(token,homeId){try{guestToken=token;guest=await legacyApi('guest/state',{token});localStorage.setItem('troian_guest_'+homeId,token);localStorage.setItem('troian_last_home',homeId);guestStep=0;legacySelectGuestStage(0);}catch(e){guest=null;error=e.message;renderNoInvite();}}
 async function fromInvite(hash){let raw;try{raw=decodeURIComponent(hash.replace(/^#invite=/,''));}catch{error='Невалиден семеен линк.';return renderNoInvite();}const dot=raw.indexOf('.');if(dot<1)return renderNoInvite();const homeId=raw.slice(0,dot),invite=raw.slice(dot+1);try{const joined=await api('guest/join',{familyId:homeId,invite});history.replaceState(null,'',location.pathname);await loadGuest(joined.token,homeId);}catch(e){error=e.message;renderNoInvite();}}
 async function legacyActions(name){if(name==='home'){history.replaceState(null,'',location.pathname);error='';legacyRenderHome();return;}if(name==='villa'||name==='program'){legacyRenderHome();return;}if(name==='family'){if(guest)return legacyRenderGuest();const home=localStorage.getItem('troian_last_home');const token=home&&localStorage.getItem('troian_guest_'+home);if(token){await legacyLoadGuest(token,home);return;}renderNoInvite();return;}if(name==='admin'){location.hash='admin';await legacyShowAdmin();return;}if(name==='back'){legacyCaptureDraft();legacySelectGuestStage(guestStep-1);return;}if(name==='next')return legacyNext(false);if(name==='skip')return legacyNext(true);if(name==='restart')return legacySelectGuestStage(0);}
-function showPhoto(i){photoIndex=i;const [file,title]=PHOTO[i];const modal=document.createElement('div');modal.className='lightbox';modal.id='lightbox';modal.setAttribute('role','dialog');modal.setAttribute('aria-modal','true');modal.innerHTML=`<strong>${esc(title)} · ${i+1} / ${PHOTO.length}</strong><button data-dir="-1" aria-label="Предишна снимка">‹</button><img src="/images/${file}" alt="${esc(title)}"><button data-dir="1" aria-label="Следваща снимка">›</button><button class="close" data-close aria-label="Затвори">✕</button>`;document.body.appendChild(modal);modal.querySelector('[data-close]').onclick=closePhoto;modal.querySelectorAll('[data-dir]').forEach(b=>b.onclick=()=>{const next=(photoIndex+Number(b.dataset.dir)+PHOTO.length)%PHOTO.length;closePhoto();showPhoto(next)});modal.addEventListener('click',e=>{if(e.target===modal)closePhoto()});}
-function closePhoto(){document.querySelector('#lightbox')?.remove();photoIndex=null;}
+let photoTrigger;
+function showPhoto(index, trigger) {
+ const [file,title]=PHOTO[index];
+ let modal=document.querySelector('#lightbox');
+ const selectedControl=document.activeElement?.dataset?.dir;
+ if (!modal) {
+  photoTrigger=trigger ?? document.activeElement;
+  modal=document.createElement('dialog');
+  modal.id='lightbox';
+  modal.className='home-lightbox';
+  modal.setAttribute('aria-label','Галерия на вилата');
+  modal.addEventListener('cancel',event=>{event.preventDefault();closePhoto();});
+  modal.addEventListener('click',event=>{if(event.target===modal)closePhoto();});
+  modal.addEventListener('keydown',event=>{
+   if(!['ArrowLeft','ArrowRight'].includes(event.key))return;
+   event.preventDefault();
+   turnPhoto(event.key==='ArrowRight'?1:-1);
+  });
+  document.body.appendChild(modal);
+ }
+ photoIndex=index;
+ const filename=file.replace('.jpg','');
+ modal.innerHTML=`<div class="home-lightbox-inner">
+  <header><strong>${esc(title)} · ${index+1} / ${PHOTO.length}</strong>
+   <button type="button" data-close aria-label="Затвори">${icon('close')}</button></header>
+  <img src="/images/${filename}-1280.webp" alt="${esc(title)}">
+  <nav aria-label="Снимки"><button type="button" data-dir="-1" aria-label="Предишна снимка">${icon('back')}</button>
+   <button type="button" data-dir="1" aria-label="Следваща снимка">${icon('next')}</button></nav></div>`;
+ modal.querySelector('[data-close]').onclick=closePhoto;
+ modal.querySelectorAll('[data-dir]').forEach(button=>button.onclick=()=>turnPhoto(Number(button.dataset.dir)));
+ if (!modal.open) {
+  if (modal.showModal) modal.showModal();
+  else modal.setAttribute('open','');
+ }
+ modal.querySelector(selectedControl==='1'?'[data-dir="1"]':selectedControl==='-1'?'[data-dir="-1"]':'[data-close]').focus?.({preventScroll:true});
+}
+function turnPhoto(delta) { showPhoto((photoIndex+delta+PHOTO.length)%PHOTO.length); }
+function closePhoto() {
+ const modal=document.querySelector('#lightbox');
+ if(!modal)return;
+ modal.close?.();
+ modal.remove();
+ photoIndex=null;
+ photoTrigger?.focus?.({preventScroll:true});
+ photoTrigger=null;
+}
 function legacyAdminView(){if(!adminData)return'';const {families:groups,recipes,slots,menu,shopping,event}=adminData;
  if(adminTab==='overview')return `<div class="admin-grid">${groups.map(f=>`<section class="admin-card"><h3>${esc(f.family.title)}</h3><p>${f.family.members.length} участници · ${f.family.members.filter(m=>f.attendance[m.id]?.status==='yes').length} потвърдили</p><button class="btn btn-pine" data-invite="${esc(f.family.id)}">Създай личен линк за Viber</button><div class="invite-output" id="invite-${esc(f.family.id)}"></div><details><summary>Отговори по хора</summary>${f.family.members.map(m=>`<p><strong>${esc(m.name)}</strong> · ${esc(f.attendance[m.id]?.status||'Няма отговор')}<br>${Object.entries(f.answers[m.id]||{}).map(([k,v])=>`${esc(LABELS[k]||k)}: ${esc((v.selected||[]).join(', '))}${v.allergyStatus&&k==='restrictions'?` · Алергии: ${esc({none:'Няма известни',has:'Има',unknown:'Не знам'}[v.allergyStatus]||'Не знам')}`:''}${v.allergens?` · Алергени: ${esc(v.allergens)}`:''}${v.dislikes?` · Не харесва: ${esc(v.dislikes)}`:''}${v.note?` · Бележка: ${esc(v.note)}`:''}${v.skipped?' · Пропуснато':''}`).join('<br>')}</p>`).join('')}</details></section>`).join('')}</div><div class="notice">Ново генериране на линк за семейство заменя стария му линк. Запази и изпрати новия веднага.</div>`;
  if(adminTab==='menu')return `<div class="admin-grid">${slots.map(s=>{const rows=menu.filter(x=>x.slot_id===s.id);return `<section class="admin-card"><span class="step-label">${esc(D_LABEL[s.day])}</span><h3>${esc(s.name)}</h3><p>Избери рецепта и брой порции. Изчисляването на съставките е детерминирано.</p>${recipes.map(r=>`<div class="row-controls" style="align-items:center;margin:7px 0"><strong style="font-size:12px;flex:1">${esc(r.name)}</strong><input type="number" min="0" max="120" step="1" data-serving="${esc(s.id)}|${esc(r.id)}" value="${rows.find(x=>x.recipe_id===r.id)?.portions||0}" style="width:72px;padding:8px"><button data-save-recipe="${esc(s.id)}|${esc(r.id)}">Запази</button></div>`).join('')}</section>`}).join('')}</div>`;
@@ -78,16 +125,19 @@ async function saveRecipe(key){const [slotId,recipeId]=key.split('|');const inpu
 async function savePurchase(id,bought=null,assignedTo=null){const item=adminData.shopping.find(x=>x.id===id);if(!item)return;try{await api('admin/purchase',{id,bought:bought===null?item.bought:bought,assignedTo:assignedTo===null?item.assignedTo:assignedTo});adminData=await api('admin/overview');message='Покупката е актуализирана.';renderAdmin()}catch(e){error=e.message;renderAdmin()}}
 async function saveEvent(){const value=Object.fromEntries([...app.querySelectorAll('[data-setting]')].map(x=>[x.dataset.setting,x.value]));try{await api('admin/event',value);adminData=await api('admin/overview');message='Информацията за вилата е запазена.';renderAdmin()}catch(e){error=e.message;renderAdmin()}}
 function exportShopping(){const rows=[['Продукт','Категория','Количество','Единица','Купено','Отговорник'],...adminData.shopping.map(x=>[x.name,x.category,String(x.quantity),x.unit,x.bought?'Да':'Не',x.assignedTo])];const csv='\ufeff'+rows.map(r=>r.map(x=>'"'+String(x).replace(/"/g,'""')+'"').join(',')).join('\r\n');const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));const link=document.createElement('a');link.href=url;link.download='troian-pazaruvane.csv';link.click();URL.revokeObjectURL(url)}
-window.addEventListener('keydown',e=>{if(!document.getElementById('lightbox'))return;if(e.key==='Escape')closePhoto();else if(e.key==='ArrowLeft'||e.key==='ArrowRight'){const next=(photoIndex+(e.key==='ArrowRight'?1:-1)+PHOTO.length)%PHOTO.length;closePhoto();showPhoto(next)}});
-let surveyV2 = false;
-let guestScreen = null;
-let organizerScreen = null;
+let editionPromise;
+let overviewPromise;
+let guestScreen;
+let organizerScreen;
+let homeObserver;
+let activeRoute = '';
 let pathGeneration = 0;
 
 function leaveV2Screen() {
   pathGeneration++;
   guestScreen?.dispose();
   organizerScreen?.dispose();
+  homeObserver?.disconnect();
   guestScreen = null;
   organizerScreen = null;
 }
@@ -98,48 +148,62 @@ function openHome() {
   renderHome();
 }
 
-async function openSurvey(link = '') {
-  if (!surveyV2) {
-    if (link) return fromInvite(link);
-    return guest ? renderGuest() : renderNoInvite();
-  }
-  leaveV2Screen();
-  const opened = pathGeneration;
-  const { mountGuest } = await import('./survey.js');
-  if (opened !== pathGeneration) return;
-  guestScreen = mountGuest({ app, link, onHome: openHome });
+function currentEdition() {
+  editionPromise ??= api('v2/status').then(value => value.available === true).catch(error => {
+    if (error.status === 404) return false;
+    editionPromise = null;
+    throw error;
+  });
+  return editionPromise;
 }
 
-window.addEventListener('hashchange', () => {
-  if (location.hash === '#admin') showAdmin();
-  else if (location.hash.startsWith('#invite=')) openSurvey(location.hash);
-  else if (location.hash === '#survey') openSurvey();
-  else if (surveyV2 && (guestScreen || organizerScreen)) {
+async function openPrivate(kind, link = '') {
+  leaveV2Screen();
+  activeRoute = kind;
+  const opened = pathGeneration;
+  app.innerHTML = `<main class="loading-shell" role="status">${loadingMark()}<span>Зарежда се…</span></main>`;
+  try {
+    const [v2, screen] = await Promise.all([
+      currentEdition(), kind === 'admin' ? import('./organizer.js') : import('./survey.js')
+    ]);
+    if (opened !== pathGeneration) return;
+    if (kind === 'admin') {
+      if (!v2) return showLegacyAdmin();
+      organizerScreen = screen.mountOrganizer({ app, onHome: openHome });
+    } else {
+      if (!v2) return link ? fromInvite(link) : guest ? renderGuest() : renderNoInvite();
+      guestScreen = screen.mountGuest({ app, link, onHome: openHome });
+    }
+  } catch {
+    if (opened !== pathGeneration) return;
+    app.innerHTML = `<main class="t27"><section class="t27-entry t27-surface">
+      <h1>Връзката прекъсна</h1><p role="alert">Страницата не успя да се зареди.</p>
+      <button type="button" class="t27-btn t27-btn--primary">Опитай отново</button>
+      <a class="t27-btn" href="/">Начало</a></section></main>`;
+    app.querySelector('button').addEventListener('click', () => openPrivate(kind, link));
+  }
+}
+
+function openSurvey(link = '') { return openPrivate('survey', link); }
+function showAdmin() { return openPrivate('admin'); }
+
+function route() {
+  const hash = location.hash;
+  if (hash === '#admin') return showAdmin();
+  if (hash.startsWith('#invite=')) return openSurvey(hash);
+  if (hash === '#survey') return openSurvey();
+  if (activeRoute !== 'home') {
     leaveV2Screen();
     renderHome();
+    if (hash === '#villa' || hash === '#program') document.querySelector(hash)?.scrollIntoView();
   }
-});
-async function init(){
- let ready=true;
- purgeOldGuestStorage();
- const readiness = api('v2/status').then(value => { surveyV2 = value.available === true; }).catch(() => {});
- try{const data=await api('public');publicOverview=data.overview||publicOverview;eventInfo=data.event||{};}
- catch{publicOverview={households:0,participants:0};ready=false;}
- await readiness;
- if(location.hash.startsWith('#invite='))await openSurvey(location.hash);
- else if(location.hash==='#survey')await openSurvey();
- else if(location.hash==='#admin')await showAdmin();
- else {
-  renderHome();
-  if(!ready){
-   const panel=document.createElement('div');
-   panel.setAttribute('role','status');
-   panel.style.cssText='background:#fff8e7;color:#6b5126;padding:13px 20px;text-align:center;font-size:13px;border-bottom:1px solid #e6c98b';
-   panel.textContent='Сайтът се отваря, но семейните анкети временно не могат да се записват. Организаторът настройва базата данни.';
-   const header=app.querySelector('.header');
-   if(header)header.insertAdjacentElement('afterend',panel);else app.prepend(panel);
-  }
- }
+}
+
+window.addEventListener('hashchange',route);
+
+function init() {
+  purgeOldGuestStorage();
+  route();
 }
 
 /* Production UX layer: private guest state, resilient drafts and a review-first flow. */
@@ -172,7 +236,7 @@ async function api(path,body=null){
   if(controller)options.signal=controller.signal;
   const response=await fetch('/api/'+path,options);
   const data=await response.json().catch(()=>({message:'Сървърът не отговори.'}));
-  if(!response.ok)throw Error(data.message||data.error||'Неуспешна заявка.');
+  if(!response.ok)throw Object.assign(new Error(data.message||data.error||'Неуспешна заявка.'),{status:response.status});
   return data;
  }catch(e){
   if(e?.name==='AbortError')throw Error('Заявката отне твърде дълго. Провери връзката и опитай отново.');
@@ -180,18 +244,29 @@ async function api(path,body=null){
   throw e;
  }finally{if(timer&&typeof clearTimeout==='function')clearTimeout(timer);}
 }
-function renderHome(){
- const householdCount=Math.max(0,Number(publicOverview.households)||0),participantCount=Math.max(0,Number(publicOverview.participants)||0);
- const cards=Array.from({length:householdCount},(_,i)=>`<article class="family-card"><span class="number">${String(i+1).padStart(2,'0')}</span><h3>Домакинство ${String(i+1).padStart(2,'0')}</h3><small>Лично семейно пространство</small><small>Отговорите се виждат само с покана</small></article>`).join('');
- app.innerHTML=banner()+`
- <main><section class="hero"><div class="hero-inner"><div class="eyebrow">ПРАЗНУВАМЕ ЗАЕДНО · 2026 / 2027</div><h1>Нова година<br><em>в Троян.</em></h1><p>Три дни. Две нощувки. Една компания. Много спомени.</p><div class="hero-info"><span>📅 31 декември – 2 януари</span><span>👨‍👩‍👧‍👦 ${participantCount} поканени</span><span>📍 Троян, България</span></div><div class="buttons"><button class="btn btn-gold" data-action="family">Попълни за семейството →</button><a href="#villa" class="btn btn-ghost">Разгледай вилата</a></div></div><div class="countdown"><span>ДО НАШЕТО СЪБИРАНЕ</span><strong id="countdown">${heroTimer()}</strong></div></section>
- <section class="section"><div class="section-header"><span class="eyebrow">НАШЕТО СЪБИРАНЕ</span><h2>Повече от една <em>новогодишна вечеря.</em></h2><p>Нека планираме заедно храната, напитките и забавленията за възрастните и децата — без излишно пазаруване.</p></div><div class="features"><article class="feature"><span class="emoji">🍽️</span><strong>Меню за три дни</strong><p>Закуски, обяди, вечеря, десерти и детски предпочитания.</p></article><article class="feature"><span class="emoji">👨‍👩‍👧‍👦</span><strong>Всеки има думата</strong><p>Един възрастен попълва за хората от своето домакинство.</p></article><article class="feature"><span class="emoji">🛒</span><strong>Общ списък за покупки</strong><p>Одобрени ястия, порции, количества и отговорници.</p></article></div></section>
- <section id="villa" class="section"><div class="section-header"><span class="eyebrow">МЯСТОТО</span><h2>Нашият <em>уютен кът.</em></h2><p>Истински снимки на вилата. Летните удобства не са потвърдени за зимния сезон.</p></div><div class="photo-grid">${PHOTO.map(([file,title],i)=>`<button class="photo-tile" data-photo="${i}" aria-label="Разгледай: ${esc(title)}"><img src="/images/${file}" loading="${i?'lazy':'eager'}" alt="${esc(title)}"><span>${esc(title)}</span></button>`).join('')}</div></section>
- <section id="program" class="section"><div class="section-header"><span class="eyebrow">31.12 – 02.01</span><h2>Три дни <em>заедно.</em></h2><p>Предложение за организация. Часовете ще бъдат потвърдени допълнително.</p></div><div class="days"><article class="day-card"><div class="date">31</div><div><small>ДЕКЕМВРИ · ДЕН 1</small><h3>Посрещаме 2027</h3><ul><li>Пристигане</li><li>Следобедно хапване</li><li>Празнична вечеря</li></ul></div></article><article class="day-card"><div class="date">01</div><div><small>ЯНУАРИ · ДЕН 2</small><h3>Първият ден</h3><ul><li>Закуска</li><li>Обяд и игри</li><li>Вечеря</li></ul></div></article><article class="day-card"><div class="date">02</div><div><small>ЯНУАРИ · ДЕН 3</small><h3>Още спомени</h3><ul><li>Закуска</li><li>Лек обяд при нужда</li><li>Отпътуване</li></ul></div></article></div></section>
- <section class="section"><div class="section-header"><span class="eyebrow">КОМПАНИЯТА</span><h2>${householdCount} <em>домакинства.</em></h2><p>Един общ празник, но отделни предпочитания за всеки човек. Имената и отговорите не са публични.</p></div><div class="family-grid">${cards}</div></section>
- <section class="section"><div class="section-cta"><div><span class="eyebrow">AI PARTY CONCIERGE</span><h2>А ти какво би <em>хапнал?</em></h2><p>Отвори семейния линк от Viber. Ще попитаме за всеки възрастен и дете поотделно. Без въвеждане на код.</p><button class="btn btn-gold" data-action="family">Към анкетата →</button></div><div style="font-size:90px" aria-hidden="true">✨</div></div></section></main>
- <footer class="footer">Троян · Нова година 2027 · Лично пространство за нашата компания <button class="back-btn" data-action="admin">Организатор</button></footer>`;
- attach();document.querySelector('#countdown')?.replaceChildren(document.createTextNode(heroTimer()));
+function renderHome() {
+ activeRoute = 'home';
+ app.innerHTML = homePage(publicOverview, PHOTO, heroTimer());
+ attach();
+ homeObserver?.disconnect();
+ if (typeof IntersectionObserver === 'function' && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+   homeObserver = new IntersectionObserver(entries => {
+     for (const {target, isIntersecting} of entries) {
+       if (!isIntersecting) continue;
+       target.classList.add('motion-in');
+       homeObserver?.unobserve(target);
+     }
+   }, {threshold:0.12});
+   app.querySelectorAll('[data-home-motion]').forEach(element => homeObserver.observe(element));
+ }
+ overviewPromise ??= api('public').then(data => {
+   publicOverview = data.overview;
+   eventInfo = data.event || {};
+ }).catch(() => { overviewPromise = null; });
+ void overviewPromise.then(() => {
+   const counts = app.querySelector('#home-counts');
+   if (counts) counts.innerHTML = homeCounts(publicOverview);
+ });
 }
 function guestSteps(){
  if(!guest)return[];
@@ -254,7 +329,7 @@ function captureDraft(){
 }
 function attach(){
  app.querySelectorAll('[data-action]').forEach(element=>element.addEventListener('click',()=>actions(element.dataset.action)));
- app.querySelectorAll('[data-photo]').forEach(element=>element.addEventListener('click',()=>showPhoto(Number(element.dataset.photo))));
+ app.querySelectorAll('[data-photo]').forEach(element=>element.addEventListener('click',()=>showPhoto(Number(element.dataset.photo),element)));
  app.querySelectorAll('[data-choice]').forEach(element=>element.addEventListener('click',()=>{captureDraft();const name=element.dataset.choice;guestDraft.selected=guestDraft.selected.includes(name)?guestDraft.selected.filter(x=>x!==name):[...guestDraft.selected,name];saveDraftLocally(current());renderGuest();}));
  app.querySelectorAll('[data-allergy]').forEach(element=>element.addEventListener('click',()=>{captureDraft();guestDraft.allergyStatus=element.dataset.allergy;saveDraftLocally(current());renderGuest();}));
  app.querySelectorAll('[data-restriction-type]').forEach(element=>element.addEventListener('click',()=>{captureDraft();guestDraft.restrictionType=element.dataset.restrictionType;saveDraftLocally(current());renderGuest();}));
@@ -324,21 +399,13 @@ function renderAdmin(){
  app.innerHTML=banner()+`<main class="admin-shell"><div class="guest-header"><button data-action="home" class="back-btn">← Начало</button><span>Контролен център · Троян 2027</span><button class="back-btn" data-logout>Изход</button></div><h1 style="font-size:45px;margin:26px 0 12px">Организацията на <em>празника.</em></h1><p class="admin-subtitle">${groups.length} домакинства · ${groups.reduce((total,f)=>total+f.family.members.length,0)} поканени · 2 нощувки / 3 дни</p><div class="admin-nav">${[['overview','Домакинства'],['menu','Меню'],['shopping','Пазаруване'],['info','Вилата']].map(([key,label])=>`<button type="button" data-tab="${key}" class="${adminTab===key?'active':''}">${label}</button>`).join('')}</div>${showError()}${adminView()}</main>`;
  attach();app.querySelectorAll('[data-tab]').forEach(button=>button.onclick=()=>{adminTab=button.dataset.tab;error='';message='';renderAdmin()});app.querySelectorAll('[data-invite]').forEach(button=>button.onclick=()=>createInvite(button.dataset.invite));app.querySelectorAll('[data-save-recipe]').forEach(button=>button.onclick=()=>saveRecipe(button.dataset.saveRecipe));app.querySelectorAll('[data-purchase]').forEach(button=>button.onchange=()=>savePurchase(button.dataset.purchase,button.checked));app.querySelectorAll('[data-assignee]').forEach(input=>input.onblur=()=>savePurchase(input.dataset.assignee,null,input.value));app.querySelector('[data-save-event]')?.addEventListener('click',saveEvent);app.querySelector('[data-logout]')?.addEventListener('click',async()=>{await api('admin/logout',{});adminData=null;location.hash='';renderHome()});app.querySelector('[data-export]')?.addEventListener('click',exportShopping);
 }
-async function showAdmin(){
- if (surveyV2) {
-  leaveV2Screen();
-  const opened = pathGeneration;
-  const { mountOrganizer } = await import('./organizer.js');
-  if (opened !== pathGeneration) return;
-  organizerScreen = mountOrganizer({ app, onHome: openHome });
-  return;
- }
+async function showLegacyAdmin(){
  error='';message='';app.innerHTML=banner()+'<main class="loading-shell" aria-live="polite">Зареждаме контролния център…</main>';
  try{await api('admin/me');adminData=await api('admin/overview');renderAdmin();}
  catch(e){app.innerHTML=banner()+`<div class="guest-shell"><section class="interview" style="max-width:550px;margin:42px auto"><span class="step-label">САМО ЗА ОРГАНИЗАТОРА</span><h2>Защитен вход</h2><p class="subtitle">Гостите нямат код за вход. Организаторът влиза с разрешения Google акаунт.</p><a class="btn btn-pine" href="/api/auth/google">Вход с Google →</a><p class="error-copy">${esc(e.message)}</p></section></div>`;attach();}
 }
 
-init().catch(err=>{
+Promise.resolve().then(init).catch(err=>{
  console.error('App initialization failed',err);
  if(!app)return;
  app.innerHTML='<main style="min-height:100vh;padding:38px 20px;display:grid;place-items:center;font-family:system-ui;background:#fafaf7;color:#224534"><section style="max-width:560px"><h1>Нова година в Троян</h1><p>Възникна проблем при зареждането. Презареди страницата. Ако проблемът остане, свържи се с организатора.</p><button id="retry-loading" style="padding:13px 20px;background:#dcb878;border:0;border-radius:9px">Опитай отново</button></section></main>';

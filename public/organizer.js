@@ -1,9 +1,10 @@
 import { ALLERGENS, CONTRIBUTION_UNITS, DAYS, DIETS, MEALS, STATUS_LABELS, TASKS, appliesToMeal } from './event-catalog.js';
 import { action, banner, dishImage, escapeHtml as e, partyApi, partyInstance, stamp } from './party-ui.js';
+import { icon, loadingMark } from './interface.js';
 
 const tabs = [
-  ['families', 'Семейства'], ['questions', 'Анкета'], ['catalog', 'Каталог'],
-  ['menu', 'Меню'], ['shopping', 'Покупки'], ['program', 'Подготовка']
+  ['families', 'Семейства', 'people'], ['questions', 'Анкета', 'form'], ['catalog', 'Каталог', 'photos'],
+  ['menu', 'Меню', 'table'], ['shopping', 'Покупки', 'basket'], ['program', 'Подготовка', 'tasks']
 ];
 const kinds = {
   snack: 'Следобедно хапване', breakfast: 'Закуска', lunch: 'Обяд',
@@ -334,23 +335,25 @@ export function mountOrganizer({ app, onHome }) {
 
   const views = { families: familyOverview, questions: questionsView, catalog: catalogView, menu: plannedMeal, shopping, program };
 
-  function render() {
+  function render(changeTab = false) {
     if (!instance.alive()) return;
     if (!data) {
       app.innerHTML = `<main class="t27 t27-admin"><section class="t27-entry t27-surface">
-        <span class="t27-brand">ТРОЯН · 2027</span><h1>${loggedOut ? 'Вход за организатора' : error ? 'Организатор' : 'Зарежда се…'}</h1>
+        <span class="t27-brand">${icon('cabin')} ТРОЯН · 2027</span>
+        ${!loggedOut && !error ? `<div class="t27-load-copy">${loadingMark()}</div>` : ''}
+        <h1>${loggedOut ? 'Вход за организатора' : error ? 'Организатор' : 'Зарежда се…'}</h1>
         ${banner(error, 'error')}${loggedOut ? '<a class="t27-btn t27-btn--primary" href="/api/auth/google">Вход с Google</a>' : error ? action('retry', 'Опитай отново') : ''}
         ${action('home', 'Към началото', 't27-text-btn')}
       </section></main>`;
       return;
     }
     app.innerHTML = `<main class="t27 t27-admin"><header class="t27-admin-header">
-      <div class="t27-split"><span class="t27-brand">ТРОЯН · 2027</span><div class="t27-chips">
-        ${action('home', 'Начало', 't27-text-btn')}${action('logout', 'Изход', 't27-text-btn')}</div></div>
+      <div class="t27-split"><span class="t27-brand">${icon('cabin')} ТРОЯН · 2027</span><div class="t27-chips">
+        ${action('home', 'Начало', 't27-text-btn')}${action('logout', 'Изход', 't27-text-btn', '', 'logout')}</div></div>
       <h1>Организация на празника</h1><p>31 декември – 2 януари · Троян</p>
-      <nav aria-label="Организатор" class="t27-admin-nav">${tabs.map(([key, label]) =>
-        action('tab:' + key, label, 't27-chip', `aria-pressed="${key === tab}"`)).join('')}</nav>
-    </header><section class="t27-admin-body" aria-busy="${busy}">
+      <nav aria-label="Организатор" class="t27-admin-nav">${tabs.map(([key, label, mark]) =>
+        action('tab:' + key, label, 't27-chip', `aria-pressed="${key === tab}"`, mark)).join('')}</nav>
+    </header><section class="t27-admin-body ${changeTab ? 't27-motion-in' : ''}" aria-busy="${busy}">
       ${banner(error, 'error')}${banner(note, 'ok')}${views[tab]()}
     </section></main>`;
   }
@@ -407,7 +410,11 @@ export function mountOrganizer({ app, onHome }) {
       }, '');
     }
     if (name === 'retry') return run(reload, '');
-    if (name === 'tab') { tab = a; note = ''; error = ''; render(); return; }
+    if (name === 'tab') {
+      tab = a; note = ''; error = ''; render(true);
+      app.querySelector('.t27-admin-nav [aria-pressed="true"]')?.focus({ preventScroll: true });
+      return;
+    }
     if (name === 'family') { opened = a; history = null; note = ''; error = ''; render(); return; }
     if (name === 'history') return run(async () => { history = await partyApi('admin/history?id=' + encodeURIComponent(opened)); }, '');
     if (name === 'copy-invite') {

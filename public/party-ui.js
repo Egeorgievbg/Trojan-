@@ -1,3 +1,5 @@
+import { icon } from './interface.js';
+
 export const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, part => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
 })[part]);
@@ -47,8 +49,8 @@ export function partyInstance(app) {
   };
 }
 
-export function action(action, label, className = 't27-btn', extra = '') {
-  return `<button type="button" class="${className}" data-action27="${escapeHtml(action)}" ${extra}>${escapeHtml(label)}</button>`;
+export function action(action, label, className = 't27-btn', extra = '', mark = '') {
+  return `<button type="button" class="${className}" data-action27="${escapeHtml(action)}" ${extra}>${icon(mark)}${escapeHtml(label)}</button>`;
 }
 
 export function dishImage(recipe, dynamic) {
@@ -67,5 +69,5 @@ export function stamp(value) {
 }
 
 export function banner(message, kind = 'info') {
-  return message ? `<div class="t27-notice t27-notice--${kind}" role="${kind === 'error' ? 'alert' : 'status'}">${escapeHtml(message)}</div>` : '';
+  return message ? `<div class="t27-notice t27-notice--${kind}" role="${kind === 'error' ? 'alert' : 'status'}">${icon(kind === 'error' ? 'alert' : kind === 'ok' ? 'check' : 'form')}<span>${escapeHtml(message)}</span></div>` : '';
 }

@@ -74,19 +74,44 @@ test('respond, resume, edit, organize and check layout in a real browser', { tim
             const { width, height } = node.getBoundingClientRect();
             return width && height && (width < 43.9 || height < 43.9);
           }).map(node => node.textContent.trim());
-        return { overflow: root.scrollWidth - root.clientWidth, narrow };
+        const overflow = root.scrollWidth - root.clientWidth;
+        const overflowing = overflow > 1 ? [...document.querySelectorAll('body *')].filter(node =>
+          node.getBoundingClientRect().right > root.clientWidth + 1 && getComputedStyle(node).position !== 'absolute')
+          .slice(0, 8).map(node => node.tagName + '.' + String(node.className)) : [];
+        return { overflow, narrow, overflowing };
       });
-      assert.ok(result.overflow <= 1, `${screen} at ${width}px: ${result.overflow}px overflow`);
+      assert.ok(result.overflow <= 1, `${screen} at ${width}px: ${result.overflow}px overflow (${result.overflowing.join(', ')})`);
       if (width <= 430) assert.deepEqual(result.narrow, [], `${screen} has cramped controls at ${width}px`);
     }
     await target.setViewportSize({ width: mobileView ? 390 : 1440, height: mobileView ? 844 : 940 });
     await capture(screen, target);
   }
 
-  await page.goto(origin + '/');
-  await page.locator('.hero').waitFor();
+  let releasePublic;
+  const heldPublic = new Promise(resolve => { releasePublic = resolve; });
+  await page.route('**/api/public', async route => { await heldPublic; await route.continue(); });
+  try {
+    await page.goto(origin + '/', { waitUntil: 'domcontentloaded' });
+    await page.locator('.hero').waitFor();
+    assert.equal(await page.locator('#home-counts').textContent(), '');
+    assert.equal(await page.locator('.home-hero-copy').evaluate(node => getComputedStyle(node).animationName), 'none');
+    assert.ok(await page.getByRole('heading', { name: /Нова година/ }).isVisible());
+  } finally {
+    releasePublic();
+  }
+  await page.getByText('4 домакинства · 14 поканени').waitFor();
+  await page.unroute('**/api/public');
   assert.doesNotMatch(await page.locator('body').innerText(), /Гост А1|Дете А3/);
   await responsive('01-home');
+  const firstPhoto = page.getByRole('button', { name: 'Разгледай: Общ изглед към имота' });
+  await firstPhoto.click();
+  const gallery = page.getByRole('dialog', { name: 'Галерия на вилата' });
+  await gallery.waitFor();
+  await page.keyboard.press('ArrowRight');
+  await gallery.getByText(/2 \/ 6/).waitFor();
+  await page.keyboard.press('Escape');
+  await gallery.waitFor({ state: 'hidden' });
+  assert.equal(await firstPhoto.evaluate(button => button === document.activeElement), true);
   await page.goto(origin + '/#invite=household-a.bad');
   await page.getByRole('alert').waitFor();
   await page.goto(url);
