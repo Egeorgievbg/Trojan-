@@ -3,7 +3,7 @@
 const normalize = value => String(value || '').toLocaleLowerCase('bg-BG').normalize('NFKC');
 const dayLabel = value => {
   const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  return match ? Number(match[3]) + '.' + match[2] + '.' + match[1] : String(value || '');
+  return match ? match[3] + '.' + match[2] + '.' + match[1] : String(value || '');
 };
 const mealLabel = item => item.dish ? item.dish : 'Все още няма избрани ястия';
 const notSet = subject => subject + ' все още не е потвърдено в приложението. Попитай организаторите в личния чат.';
@@ -18,7 +18,7 @@ export function answerFromEventData(context, question) {
   let answer;
   if (/(къде|адрес|локаци|навигаци|вила|where|location)/u.test(q) && !/(какво|ядем|меню|храна)/u.test(q)) {
     answer = event.address ? 'Адресът, въведен от организаторите, е: ' + event.address + '. Проверете подробностите преди пътуване.' : notSet('Адресът на вилата');
-  } else if (/(кога|дати|дата|ден|колко нощ|нощувк|оставаме|заминав|тръгв|пристиг|отпътув|when|night)/u.test(q)) {
+  } else if (/(кога|дати|дата|колко нощ|нощувк|оставаме|заминав|тръгв|пристиг|отпътув|when|night)/u.test(q)) {
     if (/(пристиг|час.*настан|check.?in)/u.test(q)) answer = event.arrival ? 'Информация за настаняването: ' + event.arrival : notSet('Часът за настаняване');
     else if (/(тръг|отпътув|освобож|check.?out)/u.test(q)) answer = event.departure ? 'Информация за освобождаването: ' + event.departure : notSet('Часът за освобождаване');
     else answer = dates.length ? 'Събирането е планирано от ' + dayLabel(dates[0]) + ' до ' + dayLabel(dates.at(-1)) + ', общо ' + (Number(event.nights) || Math.max(0, dates.length - 1)) + ' нощувки. Индивидуалните нощувки се избират в семейната анкета.' : notSet('Датите');
