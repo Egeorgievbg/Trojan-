@@ -70,18 +70,18 @@ async function pushRecipients(db, role, householdId, category) {
 }
 
 async function notify(db, targets, payload, actor, category) {
-  let accepted=0, failed=0, expired=0;
-  for (const subscription of targets) {
+  // Fan out concurrently to avoid blocking a serverless request per subscriber.
+  const delivered = await Promise.all(targets.map(async subscription => {
     const outcome = await deliverWebPush(subscription,payload);
-    if (outcome.status === 'accepted') accepted++;
-    else if(outcome.status === 'expired') expired++;
-    else failed++;
     await db`INSERT INTO t27_notification_log(household_id,sender_email,endpoint_hash,title,category,status,error_code)
       VALUES(${subscription.household_id ?? null},${actor},${subscription.endpoint_hash},
         ${payload.title},${category},${outcome.status},${outcome.code})`;
     if (outcome.status === 'expired') await db`DELETE FROM t27_push_subscriptions WHERE endpoint_hash=${subscription.endpoint_hash}`;
-  }
-  return {accepted,failed,expired,subscribers:targets.length};
+    return outcome.status;
+  }));
+  return { accepted:delivered.filter(x=>x==='accepted').length,
+    failed:delivered.filter(x=>x==='failed').length,
+    expired:delivered.filter(x=>x==='expired').length, subscribers:targets.length };
 }
 
 export async function handleCommunications(req, res, path, db, { role, householdId=null, actor='', json }) {
