@@ -26,12 +26,14 @@ export function createPushPrompt(app, role, alive) {
   }
   function close() { app.querySelector('[data-push-prompt]')?.remove(); }
   async function show(force = false) {
-    if (!alive() || !supported() || busy || Notification.permission === 'denied') return;
+    if (!alive() || !supported() || busy) return;
     if (!force && storage.get(setting) === 'dismissed') return;
     const cfg = await getConfig();
     if (!alive() || !cfg.enabled) return;
     configured = cfg;
-    if (!force && Notification.permission === 'granted') return;
+    const registration = await navigator.serviceWorker.getRegistration('/').catch(() => null);
+    const active = Notification.permission === 'granted' && !!(await registration?.pushManager?.getSubscription().catch(() => null));
+    if (!force && (active || Notification.permission === 'denied')) return;
     close();
     const panel = document.createElement('section');
     panel.className = 't27-push-prompt';
@@ -48,12 +50,31 @@ export function createPushPrompt(app, role, alive) {
         ${Object.entries(labels).map(([id,label]) => `<label><input type="checkbox" value="${id}" checked> ${e(label)}</label>`).join('')}</fieldset>
       <p class="t27-help">Абонаментът съдържа браузърен адрес и криптографски ключове.
        <a href="/privacy.html" target="_blank" rel="noopener">Прочети за поверителността</a>.</p>
-      <div class="t27-chips"><button type="button" class="t27-btn t27-btn--primary" data-push-allow>Разрешавам известията</button>
+      ${Notification.permission === 'denied' ? '<p class="t27-help">Известията са блокирани от браузъра. Промени разрешението в настройките на сайта, ако искаш да ги включиш.</p>' : ''}
+      <div class="t27-chips"><button type="button" class="t27-btn t27-btn--primary" data-push-allow ${Notification.permission === 'denied' ? 'disabled' : ''}>${active ? 'Обнови настройките' : 'Разрешавам известията'}</button>
+        ${active ? '<button type="button" class="t27-btn t27-btn--line" data-push-revoke>Изключи известията</button>' : ''}
         <button type="button" class="t27-btn t27-btn--line" data-push-dismiss>Не сега</button></div>
       <p data-push-status role="status" aria-live="polite"></p>`;
     app.appendChild(panel);
     panel.querySelector('[data-push-dismiss]').addEventListener('click',() => {
       storage.set(setting,'dismissed'); close();
+    });
+    panel.querySelector('[data-push-revoke]')?.addEventListener('click',async () => {
+      if (busy) return;
+      busy = true;
+      const status = panel.querySelector('[data-push-status]');
+      try {
+        const registration = await navigator.serviceWorker.getRegistration('/');
+        const sub = await registration?.pushManager?.getSubscription();
+        if (!sub) { status.textContent='Няма активен абонамент.'; return; }
+        const removed = await partyApi(prefix+'/push/unsubscribe',{endpoint:sub.endpoint});
+        if (!removed.removed) { status.textContent='Абонаментът принадлежи на друг профил. Не е изтрит.'; return; }
+        await sub.unsubscribe();
+        storage.set(setting,'dismissed');
+        status.textContent='Известията са изключени.';
+        panel.querySelector('[data-push-revoke]').disabled=true;
+      } catch { status.textContent='Неуспешно изключване. Опитай пак.'; }
+      finally { busy=false; }
     });
     panel.querySelector('[data-push-allow]').addEventListener('click',async () => {
       if (busy) return;
@@ -64,7 +85,7 @@ export function createPushPrompt(app, role, alive) {
       try {
         const permission = await permissionPromise;
         if (permission !== 'granted') { status.textContent='Известията не са разрешени. Можеш да продължиш без тях.'; return; }
-        const registration = await navigator.serviceWorker.register('/sw.js',{scope:'/'});
+        await navigator.serviceWorker.register('/sw.js',{scope:'/'});
         const ready = await navigator.serviceWorker.ready;
         const subscription = await ready.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:keyBytes(configured.publicKey)});
         const categories = [...panel.querySelectorAll('.t27-push-options input:checked')].map(node => node.value);
