@@ -46,7 +46,10 @@ export function answerFromEventData(context, question) {
   } else if (/(моята анкета|отговори|потвърд|участниц|семейство|колко сме|присъств|attendance)/u.test(q)) {
     const people = Array.isArray(household.participants) ? household.participants : [];
     const present = people.filter(person => person.status === 'yes').length;
-    answer = 'Вашата анкета е ' + (household.hasConfirmedSurvey ? 'потвърдена' : 'все още непотвърдена') + '. В домакинството са ' + people.length + ' участници; ' + present + ' са отбелязали, че ще присъстват. За подробности отворете „Моите отговори“.';
+    answer = 'Вашата анкета е ' + (household.hasConfirmedSurvey ? 'потвърдена' : 'все още непотвърдена') +
+      '. В домакинството ' + (people.length === 1 ? 'има 1 участник' : 'има ' + people.length + ' участници') +
+      '; ' + (present === 1 ? '1 е отбелязал, че ще присъства' : present + ' са отбелязали, че ще присъстват') +
+      '. За подробности отворете „Моите отговори“.';
   } else if (/(дете|деца|игри|занимани|програма|активност|activities)/u.test(q)) {
     answer = 'За заниманията и програмата проверете раздел „Програма“. Ако няма потвърден час или отговорник, попитайте организаторите в личния чат.';
   } else {
