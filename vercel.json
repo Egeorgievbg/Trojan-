@@ -9,6 +9,10 @@
       "destination": "/api/index?path=:path*"
     },
     {
+      "source": "/thank-you",
+      "destination": "/index.html"
+    },
+    {
       "source": "/",
       "destination": "/index.html"
     }
