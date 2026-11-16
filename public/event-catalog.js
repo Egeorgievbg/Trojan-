@@ -1,8 +1,12 @@
 export const DAYS = [
   { id: '2026-12-31', label: '31 декември' },
   { id: '2027-01-01', label: '1 януари' },
-  { id: '2027-01-02', label: '2 януари' }
+  { id: '2027-01-02', label: '2 януари' },
+  { id: '2027-01-03', label: '3 януари' }
 ];
+
+// Нощувките са датите без деня на отпътуване.
+export const NIGHTS = DAYS.slice(0, -1);
 
 export const MEALS = [
   { id: '31-snack', day: DAYS[0].id, title: 'Следобедно хапване', kind: 'snack' },
@@ -11,7 +15,9 @@ export const MEALS = [
   { id: '01-lunch', day: DAYS[1].id, title: 'Обяд', kind: 'lunch' },
   { id: '01-dinner', day: DAYS[1].id, title: 'Вечеря', kind: 'dinner' },
   { id: '02-breakfast', day: DAYS[2].id, title: 'Закуска', kind: 'breakfast' },
-  { id: '02-lunch', day: DAYS[2].id, title: 'Лек обяд при нужда', kind: 'light', optional: true }
+  { id: '02-lunch', day: DAYS[2].id, title: 'Обяд', kind: 'lunch', optional: true },
+  { id: '02-dinner', day: DAYS[2].id, title: 'Вечеря', kind: 'dinner' },
+  { id: '03-breakfast', day: DAYS[3].id, title: 'Закуска преди отпътуване', kind: 'breakfast' }
 ];
 
 export const ALLERGENS = {

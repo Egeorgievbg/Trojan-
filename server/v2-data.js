@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
 import {
   ACTIVITIES, ALLERGENS, CONTRIBUTION_UNITS, DEFAULT_DEFINITION, DIETS, FOOD_GROUPS,
-  MEALS, RECIPES, RESTRICTION_TYPES, STATUS_LABELS, TASKS, appliesToMeal
+  MEALS, NIGHTS, RECIPES, RESTRICTION_TYPES, STATUS_LABELS, TASKS, appliesToMeal
 } from '../public/event-catalog.js';
 
 export class RequestError extends Error {
@@ -19,6 +19,7 @@ const own = (map, id) => typeof id === 'string' && Object.hasOwn(map, id);
 const groups = new Set(FOOD_GROUPS.map(group => group.id));
 const mealKinds = new Set([...MEALS.map(meal => meal.kind), 'midnight']);
 const mealIds = new Set(MEALS.map(meal => meal.id));
+const nightIds = new Set(NIGHTS.map(day => day.id));
 const units = new Set(['g', 'ml', 'бр']);
 
 function bad(message) {
@@ -158,12 +159,13 @@ export function normalizeSurvey(input, family, definition, complete = false) {
   for (const person of members) {
     const value = object(attendance[person.id]);
     const status = own(STATUS_LABELS, value.status) ? value.status : '';
-    const meals = status === 'no' ? [] : choices(value.meals, id => mealIds.has(id), 7, 'Невалиден избор на хранене.');
+    const meals = status === 'no' ? [] : choices(value.meals, id => mealIds.has(id), MEALS.length, 'Невалиден избор на хранене.');
+    const nights = status === 'no' ? [] : choices(value.nights, id => nightIds.has(id), NIGHTS.length, 'Невалиден избор на нощувка.');
     if (complete && (!status || (status === 'yes' && !meals.length))) {
       bad('Посочи присъствие за всеки човек и поне едно хранене за потвърдените гости.');
     }
     out.attendance[person.id] = {
-      status, meals, arrival: status === 'no' ? '' : clean(value.arrival, 80),
+      status, meals, nights, arrival: status === 'no' ? '' : clean(value.arrival, 80),
       departure: status === 'no' ? '' : clean(value.departure, 80)
     };
     out.people[person.id] = normalizePerson(people[person.id], person, definition, complete, status === 'yes' || status === 'maybe');

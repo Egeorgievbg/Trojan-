@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import sharp from 'sharp';
 import { isolatedEvent } from './fixture.mjs';
-import { RECIPES } from '../public/event-catalog.js';
+import { MEALS, RECIPES } from '../public/event-catalog.js';
 
 test('Trojan V2 invitations, survey and organizer against isolated PostgreSQL', async t => {
   const { pg, handler, organizer, invitation } = await isolatedEvent();
@@ -124,7 +124,7 @@ test('Trojan V2 invitations, survey and organizer against isolated PostgreSQL', 
     assert.equal((await confirm()).status, 200);
     assert.equal((await confirm()).status, 200);
     const plan = (await request('v2/admin/overview', undefined, admin)).data;
-    assert.equal(plan.meals.length, 7);
+    assert.equal(plan.meals.length, MEALS.length);
     const dinner = plan.meals.find(item => item.id === '31-dinner');
     assert.deepEqual([dinner.confirmed, dinner.children, dinner.possible], [2, 1, 1]);
     assert.deepEqual(dinner.votes.kyufte, { confirmed: 1, possible: 0, favourite: 1 });
@@ -177,6 +177,33 @@ test('Trojan V2 invitations, survey and organizer against isolated PostgreSQL', 
     assert.equal((await request('v2/guest/state', undefined, other)).data.questionnaireVersion, 2);
   });
 
+  await t.test('private chat isolates households and push requires explicit valid subscriber keys', async () => {
+    assert.equal((await request('v2/guest/messages', undefined, '')).status, 401);
+    assert.equal((await request('v2/admin/messages', undefined, '')).status, 401);
+    const before = await request('v2/guest/messages', undefined, other);
+    assert.equal(before.status, 200);
+    assert.deepEqual(before.data.messages, []);
+    const sent = await request('v2/guest/message', { body: '<Честита Нова година>!' }, guest);
+    assert.equal(sent.status, 200, JSON.stringify(sent.data));
+    const myChat = await request('v2/guest/messages', undefined, guest);
+    assert.equal(myChat.data.messages.length, 1);
+    assert.equal(myChat.data.messages[0].body, '<Честита Нова година>!');
+    assert.equal((await request('v2/guest/messages', undefined, other)).data.messages.length, 0);
+    const adminOverview = await request('v2/admin/messages', undefined, admin);
+    assert.equal(adminOverview.status, 200);
+    assert.ok(adminOverview.data.households.find(h => h.id === 'household-a').unread >= 1);
+    const adminReply = await request('v2/admin/message', { householdId: 'household-a', body: 'Добре дошли!' }, admin);
+    assert.equal(adminReply.status, 200);
+    const messages = await request('v2/guest/messages', undefined, guest);
+    assert.equal(messages.data.messages.length, 2);
+    assert.equal(messages.data.messages[1].sender_role, 'admin');
+    assert.equal((await request('v2/guest/message', { householdId:'household-a',body:' ' }, other)).status, 400);
+    const cfg = await request('v2/guest/push/config', undefined, guest);
+    assert.equal(cfg.status, 200);
+    assert.equal(typeof cfg.data.enabled, 'boolean');
+    assert.equal((await request('v2/guest/push/subscribe', {subscription:{endpoint:'http://localhost/'},categories:['messages']}, guest)).status, 400);
+    assert.equal((await request('v2/admin/notifications', undefined, admin)).status, 200);
+  });
   await t.test('admin edits preserve participant IDs, invitation rotation and session expiry', async () => {
     assert.equal((await request('v2/admin/member', { id: adultId, householdId: 'household-b', name: 'Проба', child: false }, admin)).status, 404);
     assert.equal((await request('v2/admin/member', { id: adultId, householdId: 'household-a', name: 'Редактиран гост', child: false }, admin)).status, 200);

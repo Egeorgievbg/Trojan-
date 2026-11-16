@@ -1,9 +1,12 @@
 import { ALLERGENS, CONTRIBUTION_UNITS, DAYS, DIETS, MEALS, STATUS_LABELS, TASKS, appliesToMeal } from './event-catalog.js';
 import { action, banner, dishImage, escapeHtml as e, partyApi, partyInstance, stamp } from './party-ui.js';
 import { icon, loadingMark } from './interface.js';
+import { renderAnswers } from './admin-answers.js';
+import { createAdminComms } from './admin-comms.js';
+import { createPushPrompt } from './notifications.js';
 
 const tabs = [
-  ['families', 'Семейства', 'people'], ['questions', 'Анкета', 'form'], ['catalog', 'Каталог', 'photos'],
+  ['families', 'Семейства', 'people'], ['answers', 'Отговори', 'form'], ['chat', 'Съобщения', 'people'], ['notifications', 'Известия', 'form'], ['questions', 'Анкета', 'form'], ['catalog', 'Каталог', 'photos'],
   ['menu', 'Меню', 'table'], ['shopping', 'Покупки', 'basket'], ['program', 'Подготовка', 'tasks']
 ];
 const kinds = {
@@ -28,6 +31,8 @@ const textarea = (label, name, value = '') =>
 
 export function mountOrganizer({ app, onHome }) {
   const instance = partyInstance(app);
+  const comms = createAdminComms(app, instance.alive, instance.of, () => render());
+  const push = createPushPrompt(app, 'admin', instance.alive);
   let data;
   let tab = 'families';
   let opened = '';
@@ -85,9 +90,11 @@ export function mountOrganizer({ app, onHome }) {
       const profile = record.people?.[person.id];
       const restriction = profile?.restriction;
       const slots = MEALS.filter(meal => attendance?.meals?.includes(meal.id));
+      const stays = DAYS.slice(0, -1).filter(day => attendance?.nights?.includes(day.id));
       return `<article class="t27-compact-card">
         <strong>${e(person.name)} · ${e(STATUS_LABELS[attendance?.status] || 'Без отговор')}</strong>
         <p>${e(slots.map(meal => dateLabel(meal.day) + ' · ' + meal.title).join(', '))}</p>
+        <p>Нощувки: ${e(stays.map(day => day.label).join(', ') || 'Не са уточнени')}</p>
         ${restriction?.status === 'has' ? `<p class="t27-allergy">Ограничение · ${e(restriction.categories.map(id => ALLERGENS[id]).join(', '))}
           ${e(restriction.details)} ${restriction.crossContact ? '· провери общите съдове' : ''}</p>`
           : restriction?.status === 'unknown' ? '<p class="t27-allergy">Ограничения за уточнение</p>' : ''}
@@ -333,7 +340,10 @@ export function mountOrganizer({ app, onHome }) {
     </form>`;
   }
 
-  const views = { families: familyOverview, questions: questionsView, catalog: catalogView, menu: plannedMeal, shopping, program };
+  const views = { families: familyOverview, answers: () => renderAnswers(data, {
+    householdAnswers, statusLabel: submissions, dateLabel, recipeName: byName
+  }), chat: () => comms.chatView(), notifications: () => comms.notificationsView(data),
+    questions: questionsView, catalog: catalogView, menu: plannedMeal, shopping, program };
 
   function render(changeTab = false) {
     if (!instance.alive()) return;
@@ -349,13 +359,15 @@ export function mountOrganizer({ app, onHome }) {
     }
     app.innerHTML = `<main class="t27 t27-admin"><header class="t27-admin-header">
       <div class="t27-split"><span class="t27-brand">${icon('cabin')} ТРОЯН · 2027</span><div class="t27-chips">
-        ${action('home', 'Начало', 't27-text-btn')}${action('logout', 'Изход', 't27-text-btn', '', 'logout')}</div></div>
-      <h1>Организация на празника</h1><p>31 декември – 2 януари · Троян</p>
+        ${action('home', 'Начало', 't27-text-btn')}${action('push-settings', '🔔 Настройки', 't27-text-btn')}${action('logout', 'Изход', 't27-text-btn', '', 'logout')}</div></div>
+      <h1>Организация на празника</h1><p>31 декември – 3 януари · 3 нощувки · Троян</p>
       <nav aria-label="Организатор" class="t27-admin-nav">${tabs.map(([key, label, mark]) =>
         action('tab:' + key, label, 't27-chip', `aria-pressed="${key === tab}"`, mark)).join('')}</nav>
     </header><section class="t27-admin-body ${changeTab ? 't27-motion-in' : ''}" aria-busy="${busy}">
       ${banner(error, 'error')}${banner(note, 'ok')}${views[tab]()}
     </section></main>`;
+    comms.onMount(tab);
+    void push.show();
   }
 
   async function reload() {
@@ -410,6 +422,7 @@ export function mountOrganizer({ app, onHome }) {
       }, '');
     }
     if (name === 'retry') return run(reload, '');
+    if (name === 'push-settings') return void push.show(true);
     if (name === 'tab') {
       tab = a; note = ''; error = ''; render(true);
       app.querySelector('.t27-admin-nav [aria-pressed="true"]')?.focus({ preventScroll: true });

@@ -56,13 +56,13 @@ test('API integration against isolated PostgreSQL, never production', async t =>
     failDatabase = false;
     assert.equal((await request('health')).status, 200);
   });
-  await t.test('four households, fourteen participants, seven meal slots', async () => {
+  await t.test('four households, fourteen participants, nine meal slots', async () => {
     const publicData = await request('public');
     assert.equal(publicData.status, 200);
     assert.deepEqual(publicData.data.overview, { households: 4, participants: 14 });
     assert.equal('families' in publicData.data, false);
     assert.equal(JSON.stringify(publicData.data).includes('Гост А1'), false);
-    assert.equal((await request('admin/overview', undefined, admin)).data.slots.length, 7);
+    assert.equal((await request('admin/overview', undefined, admin)).data.slots.length, 9);
   });
   await t.test('unauthorized admin, wrong allowlist and origin denied', async () => {
     for (const path of ['admin/overview','admin/invite','admin/menu','admin/purchase','admin/import']) {

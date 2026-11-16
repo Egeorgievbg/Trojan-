@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { handleCommunications, notifyOrganizerOfSubmission } from './communications.js';
+import { answerEventQuestion } from './ai-assistant.js';
 import { isDeepStrictEqual } from 'node:util';
 import {
   DEFAULT_DEFINITION, DAYS, MEALS, RECIPES, TASKS, appliesToMeal
@@ -61,9 +63,12 @@ function forMembers(draft, family) {
 }
 
 async function guestBundle(db, id, settings, legacyState) {
-  const [[family], record, event, photoRows] = await Promise.all([
+  const [[family], record, event, photoRows, contributions] = await Promise.all([
     families(db, id), recordFor(db, id), eventSettings(db),
-    db`SELECT recipe_id FROM t27_dish_photos`
+    db`SELECT recipe_id FROM t27_dish_photos`,
+    db`SELECT h.title AS household, s.submitted->'shared'->'contributions' AS items
+      FROM t27_surveys s JOIN households h ON h.id = s.household_id
+      WHERE h.archived_at IS NULL AND s.submitted_revision IS NOT NULL`
   ]);
   if (!family) throw new RequestError(401, 'Поканата вече не е активна.');
   const questionnaireVersion = record?.questionnaire_version ?? settings.active_version;
@@ -80,6 +85,12 @@ async function guestBundle(db, id, settings, legacyState) {
     draft: record ? forMembers(record.draft, family) : historic.profile,
     legacyChoices: historic?.ambiguous ?? {},
     dishPhotos: photoRows.map(row => row.recipe_id),
+    // Само изрично заявени общи приноси. Личните хранителни предпочитания остават поверителни.
+    sharedContributions: contributions.flatMap(row => array(row.items).map(item => ({
+      household: row.household, label: clean(item.label, 100),
+      recipeId: clean(item.recipeId, 64), quantity: item.quantity, unit: item.unit,
+      mealId: clean(item.mealId, 64)
+    }))).filter(item => item.label || item.recipeId).slice(0, 120),
     event: Object.fromEntries(['address', 'navigation', 'arrival', 'departure', 'bring', 'notes', 'mealTimes']
       .filter(key => event[key] !== undefined).map(key => [key, event[key]]))
   };
@@ -218,7 +229,7 @@ async function saveEvent(db, body) {
   const program = object(body.mealTimes);
   const chores = object(body.chores);
   const event = {
-    ...previous, dates: DAYS.map(day => day.id), nights: 2,
+    ...previous, dates: DAYS.map(day => day.id), nights: DAYS.length - 1,
     address: clean(body.address), navigation: validNavigation(clean(body.navigation, 390)),
     arrival: clean(body.arrival, 90), departure: clean(body.departure, 90),
     bring: clean(body.bring, 650), notes: clean(body.notes, 650),
@@ -236,9 +247,17 @@ async function saveEvent(db, body) {
   return event;
 }
 
+const communicationPaths = new Set(['messages','message','messages/read','push/config','push/subscribe','push/unsubscribe']);
+const adminCommunicationPaths = new Set([...communicationPaths,'notifications','notifications/send']);
+
 const methods = {
   'guest/join': 'POST', 'guest/state': 'GET', 'guest/draft': 'POST', 'guest/confirm': 'POST',
   'guest/leave': 'POST', 'guest/photo': 'GET', 'dish-photo': 'GET',
+  'guest/ai': 'POST', 'guest/messages': 'GET', 'guest/message': 'POST', 'guest/messages/read': 'POST',
+  'guest/push/config': 'GET', 'guest/push/subscribe': 'POST', 'guest/push/unsubscribe': 'POST',
+  'admin/messages': 'GET', 'admin/message': 'POST', 'admin/messages/read': 'POST',
+  'admin/push/config': 'GET', 'admin/push/subscribe': 'POST', 'admin/push/unsubscribe': 'POST',
+  'admin/notifications': 'GET', 'admin/notifications/send': 'POST',
   'admin/overview': 'GET', 'admin/history': 'GET', 'admin/family': 'POST', 'admin/member': 'POST',
   'admin/invite': 'POST', 'admin/photo': 'GET', 'admin/family-photo': 'POST', 'admin/dish-photo': 'POST',
   'admin/questionnaire': 'POST', 'admin/publish': 'POST', 'admin/menu': 'POST',
@@ -283,8 +302,16 @@ export async function handleV2(req, res, path, db, dependencies) {
     const id = await guestSession(db, tokenHash);
     if (!id) return json(res, 401, { message: 'Отвори отново личния семеен линк от Viber.' });
     if (path === 'guest/photo') return servePhoto(db, res, id, 'household');
+    if (communicationPaths.has(path.slice('guest/'.length))) return handleCommunications(req,res,path,db,{role:'guest',householdId:id,json});
     if (path === 'guest/state') return json(res, 200, await guestBundle(db, id, settings, legacyState));
-    return json(res, 200, await saveSurvey(db, id, body, settings, legacyState, path === 'guest/confirm'));
+    if (path === 'guest/ai') return json(res,200,await answerEventQuestion(db,id,body));
+    const prior=path==='guest/confirm' ? await recordFor(db,id) : null;
+    const result=await saveSurvey(db,id,body,settings,legacyState,path==='guest/confirm');
+    if (path==='guest/confirm' && prior?.submitted_revision !== result.status.submittedRevision) {
+      try { await notifyOrganizerOfSubmission(db,result.family.title); }
+      catch { /* Confirmation has priority over optional push delivery. */ }
+    }
+    return json(res,200,result);
   }
   const organizer = await auth(req);
   if (path === 'dish-photo') {
@@ -292,6 +319,7 @@ export async function handleV2(req, res, path, db, dependencies) {
     return servePhoto(db, res, clean(req.query?.id, 64), 'dish');
   }
   if (!organizer) return json(res, 401, { message: 'Само организаторът има достъп.' });
+  if (adminCommunicationPaths.has(path.slice('admin/'.length))) return handleCommunications(req,res,path,db,{role:'admin',actor:String(organizer.email||''),json});
 
   if (path === 'admin/overview') return json(res, 200, await planner(db, settings, legacyRecipes));
   if (path === 'admin/history') {

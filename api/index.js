@@ -2,6 +2,7 @@ import { randomBytes, createHash } from 'node:crypto';
 import { neon } from '@neondatabase/serverless';
 import { SignJWT, jwtVerify, createRemoteJWKSet } from 'jose';
 import { handleV2, releaseSettings } from '../server/v2-routes.js';
+import { DAYS, MEALS } from '../public/event-catalog.js';
 
 const adminEmails=(process.env.ADMIN_EMAILS||'').split(',').map(x=>x.trim().toLowerCase()).filter(Boolean);
 const base=(process.env.PUBLIC_BASE_URL||'').replace(/\/$/,'');
@@ -27,9 +28,9 @@ const allergenCategories=['Зърнени храни с глутен','Рако�
 const restrictionTypes=['allergy','intolerance','sensitivity','unknown'];
 const allowed={food:['Скара','Пилешко','Свинско печено','Телешко','Риба','Пица','Паста','Домашна гозба','Вегетарианско','Супа','Картофки','Бургери','Ориз','Сандвичи','Плодове','Палачинки'],sides:['Шопска салата','Руска салата','Зелена салата','Картофки','Туршия','Сирена','Мезета','Разядки','Печени зеленчуци'],drinks:['Вода','Безалкохолно','Сок','Кафе','Чай','Бира','Вино','Ракия','Уиски','Без алкохол','Какао','Мляко'],breakfast:['Баница','Мекици','Яйца','Палачинки','Сандвичи','Плодове','Кисело мляко','Кафе','Чай','Зърнена закуска'],desserts:['Торта','Шоколад','Плодове','Сладолед','Сладкиши','Баклава','Домашен сладкиш'],extras:['Настолни игри','Игри за децата','Музика','Танци','Мезета','Баница'],restrictions:allergenCategories,table:['Баница','Палачинки','Торта','Сирена','Скара','Шопска салата','Плодове'],organization:['Пазаруване','Готвене','Музика','Игри','Фотографии','Подаръци']};
 const adultDrinks=new Set(['Бира','Вино','Ракия','Уиски']);
-const days=['2026-12-31','2027-01-01','2027-01-02'];
+const days=DAYS.map(day=>day.id);
 const pgDays=v=>'{'+v.filter(x=>days.includes(x)).join(',')+'}';
-const slots=[{id:'31-snack',day:days[0],name:'Следобедно хапване'},{id:'31-dinner',day:days[0],name:'Новогодишна вечеря'},{id:'01-breakfast',day:days[1],name:'Закуска'},{id:'01-lunch',day:days[1],name:'Обяд'},{id:'01-dinner',day:days[1],name:'Вечеря'},{id:'02-breakfast',day:days[2],name:'Закуска'},{id:'02-lunch',day:days[2],name:'Лек обяд при нужда'}];
+const slots=MEALS.map(meal=>({id:meal.id,day:meal.day,name:meal.title}));
 const ingredient=(name,unit,amount,category)=>({name,unit,amount,category});
 const recipes=[
  {id:'grill',name:'Скара',ingredients:[ingredient('Свинско месо','g',190,'Месо'),ingredient('Пилешко месо','g',70,'Месо')]},
@@ -128,10 +129,10 @@ export default async function handler(req,res){
       (SELECT count(*)::integer FROM households WHERE archived_at IS NULL) AS households,
       (SELECT count(*)::integer FROM members m JOIN households h ON h.id = m.household_id
        WHERE m.archived_at IS NULL AND h.archived_at IS NULL) AS participants`;
-    return send(res, 200, { overview: counts, event: { dates: days, nights: 2 } });
+    return send(res, 200, { overview: counts, event: { dates: days, nights: days.length - 1 } });
    }
    const homes=await publicHomes(db);const [info]=await db`SELECT value FROM event_settings WHERE id=1`;
-   return send(res,200,{overview:{households:homes.length,participants:homes.reduce((sum,home)=>sum+home.members.length,0)},event:{dates:days,nights:2}});
+   return send(res,200,{overview:{households:homes.length,participants:homes.reduce((sum,home)=>sum+home.members.length,0)},event:{dates:days,nights:days.length - 1}});
   }
   if(req.method==='POST'&&path==='guest/join'){
    const familyId=clean(body.familyId,55),invite=toToken(body.invite);

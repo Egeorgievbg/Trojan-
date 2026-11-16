@@ -1,0 +1,19 @@
+{
+  "name": "Троян 2027 · Нашата Нова година",
+  "short_name": "Троян 2027",
+  "description": "Семейна организация за Нова година в Троян",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f7f4ed",
+  "theme_color": "#12372d",
+  "lang": "bg",
+  "icons": [
+    {
+      "src": "/pwa-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

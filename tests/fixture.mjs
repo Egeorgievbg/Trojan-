@@ -13,6 +13,12 @@ export async function isolatedEvent(origin = 'https://example.test') {
   await pg.exec(await read('seed.sql'));
   await pg.exec(migration);
   await pg.exec(migration);
+  // Apply every additive release migration to the synthetic test database.
+  for (const name of ['002-third-night.sql','003-communications.sql','004-ai-usage.sql']) {
+    const step = await read('migrations/' + name);
+    await pg.exec(step);
+    await pg.exec(step); // All new migrations must be idempotent.
+  }
   await pg.exec('UPDATE t27_settings SET enabled = true, fixture_only = true WHERE id = 1');
   mock.module('@neondatabase/serverless', { namedExports: { neon: () => {
     const query = (strings, ...values) => {

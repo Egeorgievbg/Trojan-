@@ -4,7 +4,7 @@ import { icon, loadingMark } from './interface.js';
 const app=document.getElementById('app');
 const HOUSEHOLDS=[];
 const PHOTO=[['aerial.jpg','Общ изглед към имота'],['veranda.jpg','Уютната веранда'],['garden-wide.jpg','Дворът'],['garden-terrace.jpg','Къщата и терасата'],['garden-loungers.jpg','Кът за почивка'],['bedroom.jpg','Спалнята']];
-const DATES=['2026-12-31','2027-01-01','2027-01-02'];const D_LABEL={'2026-12-31':'31 декември','2027-01-01':'1 януари','2027-01-02':'2 януари'};
+const DATES=['2026-12-31','2027-01-01','2027-01-02','2027-01-03'];const D_LABEL={'2026-12-31':'31 декември','2027-01-01':'1 януари','2027-01-02':'2 януари','2027-01-03':'3 януари'};
 const TOPICS=['food','sides','drinks','restrictions','breakfast','desserts','extras'];
 const LABELS={food:'Основни ястия',sides:'Салати и мезета',drinks:'Напитки',restrictions:'Алергии и ограничения',breakfast:'Закуски',desserts:'Десерти',extras:'Още идеи'};
 const ALLERGEN_CATEGORIES=['Зърнени храни с глутен','Ракообразни','Яйца','Риба','Фъстъци','Соя','Мляко','Ядки','Целина','Синап','Сусам','Сулфити','Лупина','Мекотели','Друго'];
@@ -30,10 +30,10 @@ function banner(){return `<header class="header"><div class="header-inner"><div 
 function showError(){return (error?`<div class="error" role="alert">${esc(error)}</div>`:'')+(message?`<div class="notice" role="status">${esc(message)}</div>`:'');}
 function heroTimer(){const ms=Math.max(0,new Date('2026-12-31T00:00:00+02:00')-new Date());return ms<=0?'Празничните дни настъпиха!':`${Math.floor(ms/86400000)} дни · ${String(Math.floor(ms/3600000)%24).padStart(2,'0')} часа · ${String(Math.floor(ms/60000)%60).padStart(2,'0')} минути`;}
 function legacyRenderHome(){const homes=families.length?families:HOUSEHOLDS;app.innerHTML=banner()+`
- <main><section class="hero"><div class="hero-inner"><div class="eyebrow">ПРАЗНУВАМЕ ЗАЕДНО · 2026 / 2027</div><h1>Нова година<br><em>в Троян.</em></h1><p>Три дни. Две нощувки. Една компания. Много спомени.</p><div class="hero-info"><span>📅 31 декември – 2 януари</span><span>👨‍👩‍👧‍👦 14 поканени</span><span>📍 Троян, България</span></div><div class="buttons"><button class="btn btn-gold" data-action="family">Попълни за семейството →</button><a href="#villa" class="btn btn-ghost">Разгледай вилата</a></div></div><div class="countdown"><span>ДО НАШЕТО СЪБИРАНЕ</span><strong id="countdown">${heroTimer()}</strong></div></section>
+ <main><section class="hero"><div class="hero-inner"><div class="eyebrow">ПРАЗНУВАМЕ ЗАЕДНО · 2026 / 2027</div><h1>Нова година<br><em>в Троян.</em></h1><p>Четири дни. Три нощувки. Една компания. Много спомени.</p><div class="hero-info"><span>📅 31 декември – 2 януари</span><span>👨‍👩‍👧‍👦 14 поканени</span><span>📍 Троян, България</span></div><div class="buttons"><button class="btn btn-gold" data-action="family">Попълни за семейството →</button><a href="#villa" class="btn btn-ghost">Разгледай вилата</a></div></div><div class="countdown"><span>ДО НАШЕТО СЪБИРАНЕ</span><strong id="countdown">${heroTimer()}</strong></div></section>
  <section class="section"><div class="section-header"><span class="eyebrow">НАШЕТО СЪБИРАНЕ</span><h2>Повече от една <em>новогодишна вечеря.</em></h2><p>Нека планираме заедно храната, напитките и забавленията за възрастните и децата — без излишно пазаруване.</p></div><div class="features"><article class="feature"><span class="emoji">🍽️</span><strong>Меню за три дни</strong><p>Закуски, обяди, вечеря, десерти и детски предпочитания.</p></article><article class="feature"><span class="emoji">👨‍👩‍👧‍👦</span><strong>Всеки има думата</strong><p>Един възрастен попълва за хората от своето домакинство.</p></article><article class="feature"><span class="emoji">🛒</span><strong>Общ списък за покупки</strong><p>Одобрени ястия, порции, количества и отговорници.</p></article></div></section>
  <section id="villa" class="section"><div class="section-header"><span class="eyebrow">МЯСТОТО</span><h2>Нашият <em>уютен кът.</em></h2><p>Истински снимки на вилата. Летните удобства не са потвърдени за зимния сезон.</p></div><div class="photo-grid">${PHOTO.map(([file,title],i)=>`<button class="photo-tile" data-photo="${i}" aria-label="Разгледай: ${esc(title)}"><img src="/images/${file}" loading="${i?'lazy':'eager'}" alt="${esc(title)}"><span>${esc(title)}</span></button>`).join('')}</div></section>
- <section id="program" class="section"><div class="section-header"><span class="eyebrow">31.12 – 02.01</span><h2>Три дни <em>заедно.</em></h2><p>Предложение за организация. Часовете ще бъдат потвърдени допълнително.</p></div><div class="days"><article class="day-card"><div class="date">31</div><div><small>ДЕКЕМВРИ · ДЕН 1</small><h3>Посрещаме 2027</h3><ul><li>Пристигане</li><li>Следобедно хапване</li><li>Празнична вечеря</li></ul></div></article><article class="day-card"><div class="date">01</div><div><small>ЯНУАРИ · ДЕН 2</small><h3>Първият ден</h3><ul><li>Закуска</li><li>Обяд и игри</li><li>Вечеря</li></ul></div></article><article class="day-card"><div class="date">02</div><div><small>ЯНУАРИ · ДЕН 3</small><h3>Още спомени</h3><ul><li>Закуска</li><li>Лек обяд при нужда</li><li>Отпътуване</li></ul></div></article></div></section>
+ <section id="program" class="section"><div class="section-header"><span class="eyebrow">31.12 – 03.01</span><h2>Четири дни <em>заедно.</em></h2><p>Предложение за организация. Часовете ще бъдат потвърдени допълнително.</p></div><div class="days"><article class="day-card"><div class="date">31</div><div><small>ДЕКЕМВРИ · ДЕН 1</small><h3>Посрещаме 2027</h3><ul><li>Пристигане</li><li>Следобедно хапване</li><li>Празнична вечеря</li></ul></div></article><article class="day-card"><div class="date">01</div><div><small>ЯНУАРИ · ДЕН 2</small><h3>Първият ден</h3><ul><li>Закуска</li><li>Обяд и игри</li><li>Вечеря</li></ul></div></article><article class="day-card"><div class="date">02</div><div><small>ЯНУАРИ · ДЕН 3</small><h3>Още спомени</h3><ul><li>Закуска</li><li>Лек обяд при нужда</li><li>Отпътуване</li></ul></div></article></div></section>
  <section class="section"><div class="section-header"><span class="eyebrow">КОМПАНИЯТА</span><h2>Четири <em>домакинства.</em></h2><p>Един общ празник, но отделни предпочитания за всеки човек.</p></div><div class="family-grid">${homes.map((h,i)=>`<article class="family-card"><span class="number">0${i+1}</span><h3>${esc(h.title)}</h3>${h.members.map(m=>`<small>${m.child?'✦ ':''}${esc(m.name)}</small>`).join('')}</article>`).join('')}</div></section>
  <section class="section"><div class="section-cta"><div><span class="eyebrow">AI PARTY CONCIERGE</span><h2>А ти какво би <em>хапнал?</em></h2><p>Отвори семейния линк от Viber. Ще попитаме за всеки възрастен и дете поотделно. Без въвеждане на код.</p><button class="btn btn-gold" data-action="family">Към анкетата →</button></div><div style="font-size:90px" aria-hidden="true">✨</div></div></section></main>
  <footer class="footer">Троян · Нова година 2027 · Лично пространство за нашата компания <button class="back-btn" data-action="admin">Организатор</button></footer>`;
@@ -144,7 +144,7 @@ function leaveV2Screen() {
 
 function openHome() {
   leaveV2Screen();
-  history.replaceState(null, '', location.pathname);
+  history.replaceState(null, '', '/');
   renderHome();
 }
 
@@ -190,6 +190,7 @@ function showAdmin() { return openPrivate('admin'); }
 function route() {
   const hash = location.hash;
   if (hash === '#admin') return showAdmin();
+  if (location.pathname === '/thank-you' && !hash) return openSurvey();
   if (hash.startsWith('#invite=')) return openSurvey(hash);
   if (hash === '#survey') return openSurvey();
   if (activeRoute !== 'home') {
