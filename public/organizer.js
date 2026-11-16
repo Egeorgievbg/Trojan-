@@ -2,9 +2,11 @@ import { ALLERGENS, CONTRIBUTION_UNITS, DAYS, DIETS, MEALS, STATUS_LABELS, TASKS
 import { action, banner, dishImage, escapeHtml as e, partyApi, partyInstance, stamp } from './party-ui.js';
 import { icon, loadingMark } from './interface.js';
 import { renderAnswers } from './admin-answers.js';
+import { createAdminComms } from './admin-comms.js';
+import { createPushPrompt } from './notifications.js';
 
 const tabs = [
-  ['families', 'Семейства', 'people'], ['answers', 'Отговори', 'form'], ['questions', 'Анкета', 'form'], ['catalog', 'Каталог', 'photos'],
+  ['families', 'Семейства', 'people'], ['answers', 'Отговори', 'form'], ['chat', 'Съобщения', 'people'], ['notifications', 'Известия', 'form'], ['questions', 'Анкета', 'form'], ['catalog', 'Каталог', 'photos'],
   ['menu', 'Меню', 'table'], ['shopping', 'Покупки', 'basket'], ['program', 'Подготовка', 'tasks']
 ];
 const kinds = {
@@ -29,6 +31,8 @@ const textarea = (label, name, value = '') =>
 
 export function mountOrganizer({ app, onHome }) {
   const instance = partyInstance(app);
+  const comms = createAdminComms(app, instance.alive, instance.of, () => render());
+  const push = createPushPrompt(app, 'admin', instance.alive);
   let data;
   let tab = 'families';
   let opened = '';
@@ -338,7 +342,8 @@ export function mountOrganizer({ app, onHome }) {
 
   const views = { families: familyOverview, answers: () => renderAnswers(data, {
     householdAnswers, statusLabel: submissions, dateLabel, recipeName: byName
-  }), questions: questionsView, catalog: catalogView, menu: plannedMeal, shopping, program };
+  }), chat: () => comms.chatView(), notifications: () => comms.notificationsView(data),
+    questions: questionsView, catalog: catalogView, menu: plannedMeal, shopping, program };
 
   function render(changeTab = false) {
     if (!instance.alive()) return;
@@ -361,6 +366,8 @@ export function mountOrganizer({ app, onHome }) {
     </header><section class="t27-admin-body ${changeTab ? 't27-motion-in' : ''}" aria-busy="${busy}">
       ${banner(error, 'error')}${banner(note, 'ok')}${views[tab]()}
     </section></main>`;
+    comms.onMount(tab);
+    void push.show();
   }
 
   async function reload() {
