@@ -2,6 +2,7 @@ import { validSubscription, validPushEndpoint, endpointHash, deliverWebPush } fr
 import { RequestError, clean } from './v2-data.js';
 
 const categories = new Set(['messages','announcements','menu','tasks']);
+const pushConfigured = () => Boolean(process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY && process.env.VAPID_SUBJECT);
 const error = (code,message) => { throw new RequestError(code,message); };
 const safeText = (v, max) => clean(v,max);
 const validTarget = text => typeof text === 'string' && /^\/(?!\/)[A-Za-z0-9_/#?&=.%+-]{0,180}$/.test(text);
@@ -104,7 +105,8 @@ export async function handleCommunications(req, res, path, db, { role, household
   if (!guest) Object.assign(allowed,{ notifications:'GET', 'notifications/send':'POST' });
   if (!Object.hasOwn(allowed,route)) error(404,'Непознат маршрут.');
   if (req.method !== allowed[route]) error(405,'Непозволен метод.');
-  if(route === 'push/config') return json(res,200,{ enabled:!!(process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY && process.env.VAPID_SUBJECT), publicKey:process.env.VAPID_PUBLIC_KEY || '', categories:[...categories] });
+  if(route === 'push/config') return json(res,200,{ enabled:pushConfigured(), publicKey:pushConfigured() ? process.env.VAPID_PUBLIC_KEY : '', categories:[...categories] });
+  if (route === 'push/subscribe' && !pushConfigured()) error(503,'Известията още не са конфигурирани от организатора.');
   if(route === 'push/subscribe') return json(res,200,await storeSubscription(db,role,householdId,body.subscription,body.categories));
   if(route === 'push/unsubscribe') return json(res,200,await removeSubscription(db,role,householdId,body.endpoint));
   if(route === 'messages') {
@@ -147,9 +149,10 @@ export async function handleCommunications(req, res, path, db, { role, household
   if(route === 'notifications') {
     const logs=await db`SELECT household_id,title,category,status,error_code,created_at
       FROM t27_notification_log ORDER BY created_at DESC LIMIT 70`;
-    return json(res,200,{logs});
+    return json(res,200,{logs,configured:pushConfigured()});
   }
   if(route === 'notifications/send') {
+    if (!pushConfigured()) error(503,'Push известията не са конфигурирани. Нужни са VAPID ключове.');
     const category=safeCategory(body.category);
     const title=safeText(body.title,100), message=safeText(body.body,250);
     const householdId=body.audience==='all'?null:safeText(body.householdId,64);
@@ -159,6 +162,7 @@ export async function handleCommunications(req, res, path, db, { role, household
       WHERE sender_email=${actor} AND created_at > now()-interval '1 hour'`;
     if(rate.total >= 120) error(429,'Лимитът за известия е достигнат.');
     const targets=await pushRecipients(db,'guest',householdId,category);
+    if (targets.length > 20) error(413,'Има повече от 20 абонамента. Изпрати поотделно към домакинствата, за да не се прекъсне заявката.');
     const payload={title,body:message,url,category};
     const result=await notify(db,targets,payload,actor,category);
     if(!targets.length) await db`INSERT INTO t27_notification_log(household_id,sender_email,title,category,status)
