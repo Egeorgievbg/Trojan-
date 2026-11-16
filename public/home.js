@@ -1,7 +1,7 @@
 import { icon } from './interface.js';
 
 const features = [
-  ['table', 'Меню за три дни', 'Изберете ястия и напитки за всяко хранене.'],
+  ['table', 'Меню за четири дни', 'Изберете ястия и напитки за всяко хранене.'],
   ['people', 'Отговори за всеки', 'Попълнете веднъж за семейството, поотделно за всеки гост.'],
   ['basket', 'Общи покупки', 'Съберете продуктите, количествата и отговорниците на едно място.']
 ];
@@ -32,7 +32,7 @@ export function homePage(overview, photos, countdown) {
         sizes="100vw" fetchpriority="high" alt="">
       <div class="home-hero-inner">
         <div class="home-hero-copy">
-          <p class="home-kicker">${icon('calendar')} 31 декември – 2 януари</p>
+          <p class="home-kicker">${icon('calendar')} 31 декември – 3 януари</p>
           <h1 id="home-title">Нова година<br><em>в Троян.</em></h1>
           <p class="home-intro">Три дни заедно. Подготвяме менюто, игрите и празничната вечеря.</p>
           <div class="home-actions">
@@ -66,7 +66,7 @@ export function homePage(overview, photos, countdown) {
       <p class="home-help">Снимки на вилата. Летните удобства не са потвърдени за зимния сезон.</p>
     </section>
     <section class="home-section" id="program" aria-labelledby="home-program">
-      <p class="home-kicker">${icon('calendar')} 31.12 – 02.01</p>
+      <p class="home-kicker">${icon('calendar')} 31.12 – 03.01</p>
       <h2 id="home-program">Програма за трите дни</h2>
       <div class="home-grid">${days.map(([date, month, title, plan]) => `<article class="home-day" data-home-motion>
         <div class="home-date"><strong>${date}</strong><span>${month}</span></div>
