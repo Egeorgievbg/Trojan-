@@ -17,6 +17,7 @@ export function thankYouSection(model, reviewMarkup) {
       <h2>Готово, ${e(model.family.title)}! 🎉</h2>
       <p>Отговорите са потвърдени и могат да бъдат редактирани.</p>
       <p class="t27-pill">Потвърдено на ${e(stamp(model.status.submittedAt))}</p>
+      <button type="button" class="t27-btn t27-btn--line" data-action27="push-settings">🔔 Управление на известията</button>
     </div>
     <details class="t27-fold" open><summary>Вашите отговори и нощувки</summary>
       <div class="t27-stack">${reviewMarkup}</div></details>
