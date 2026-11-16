@@ -166,7 +166,7 @@ function selectGuestStage(i,keepNotice=false){
  if(list[guestStep].kind==='person')requestCoach(list[guestStep]);
  if(typeof window!=='undefined'&&typeof window.scrollTo==='function')window.scrollTo({top:0,behavior:'instant'});
 }
-function saveStateLabel(){return saveState==='saving'?'Запазва…':saveState==='saved'?'Запазено на сървъра':saveState==='error'?'Неуспешно запазване — опитай отново':'';}
+function saveStateLabel(){return saveState==='saving'?'Запазва…':saveState==='saved'?'Запазено на сървъра':'';}
 function statusText(status){return status==='yes'?'Идва':status==='maybe'?'Може би':status==='no'?'Не идва':'Не е попълнено';}
 function restrictionTypeText(value){return RESTRICTION_TYPES.find(([key])=>key===value)?.[1]||'Не е уточнено';}
 function reviewRow(person,topic,record,stageIndex){
