@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { handleCommunications } from './communications.js';
+import { handleCommunications, notifyOrganizerOfSubmission } from './communications.js';
 import { answerEventQuestion } from './ai-assistant.js';
 import { isDeepStrictEqual } from 'node:util';
 import {
@@ -305,7 +305,13 @@ export async function handleV2(req, res, path, db, dependencies) {
     if (communicationPaths.has(path.slice('guest/'.length))) return handleCommunications(req,res,path,db,{role:'guest',householdId:id,json});
     if (path === 'guest/state') return json(res, 200, await guestBundle(db, id, settings, legacyState));
     if (path === 'guest/ai') return json(res,200,await answerEventQuestion(db,id,body));
-    return json(res, 200, await saveSurvey(db, id, body, settings, legacyState, path === 'guest/confirm'));
+    const prior=path==='guest/confirm' ? await recordFor(db,id) : null;
+    const result=await saveSurvey(db,id,body,settings,legacyState,path==='guest/confirm');
+    if (path==='guest/confirm' && prior?.submitted_revision !== result.status.submittedRevision) {
+      try { await notifyOrganizerOfSubmission(db,result.family.title); }
+      catch { /* Confirmation has priority over optional push delivery. */ }
+    }
+    return json(res,200,result);
   }
   const organizer = await auth(req);
   if (path === 'dish-photo') {
