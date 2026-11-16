@@ -359,7 +359,7 @@ export function mountOrganizer({ app, onHome }) {
     }
     app.innerHTML = `<main class="t27 t27-admin"><header class="t27-admin-header">
       <div class="t27-split"><span class="t27-brand">${icon('cabin')} ТРОЯН · 2027</span><div class="t27-chips">
-        ${action('home', 'Начало', 't27-text-btn')}${action('logout', 'Изход', 't27-text-btn', '', 'logout')}</div></div>
+        ${action('home', 'Начало', 't27-text-btn')}${action('push-settings', '🔔 Настройки', 't27-text-btn')}${action('logout', 'Изход', 't27-text-btn', '', 'logout')}</div></div>
       <h1>Организация на празника</h1><p>31 декември – 3 януари · 3 нощувки · Троян</p>
       <nav aria-label="Организатор" class="t27-admin-nav">${tabs.map(([key, label, mark]) =>
         action('tab:' + key, label, 't27-chip', `aria-pressed="${key === tab}"`, mark)).join('')}</nav>
@@ -422,6 +422,7 @@ export function mountOrganizer({ app, onHome }) {
       }, '');
     }
     if (name === 'retry') return run(reload, '');
+    if (name === 'push-settings') return void push.show(true);
     if (name === 'tab') {
       tab = a; note = ''; error = ''; render(true);
       app.querySelector('.t27-admin-nav [aria-pressed="true"]')?.focus({ preventScroll: true });
